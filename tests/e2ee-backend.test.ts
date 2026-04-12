@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
-import type { CrudAdapter } from "../src/adapters/contracts";
-import type { PasswordAuthAdapter } from "../src/auth/password-auth-client";
+import type { CrudAdapter, GraphqlTransport, RestTransport } from "../src/adapters/contracts";
+import {
+  createGraphqlPasswordAuthConfig,
+  createRestPasswordAuthConfig,
+} from "../src/auth/password-auth-client";
 import {
   E2eeBackendStorageStrategy,
   createE2eeBackend,
@@ -65,27 +67,85 @@ class SharedStore {
 
 const saltBase64 = bytesToBase64(Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 1)));
 
-function createAuthAdapter(): PasswordAuthAdapter<{ email: string }> {
-  return {
-    async getKdfSalt() {
-      return saltBase64;
+function createGraphqlAuth(): ReturnType<typeof createGraphqlPasswordAuthConfig<{ email: string }>> {
+  const transport: GraphqlTransport = {
+    async mutate<TResult, TVariables = Record<string, unknown>>(document: unknown, variables?: TVariables) {
+      if (document === "LOGIN") {
+        return {
+          login: { ok: true, user: { email: String((variables as { email: string }).email) } },
+        } as TResult;
+      }
+      if (document === "LOGOUT") {
+        return { logout: true } as TResult;
+      }
+      if (document === "REFRESH") {
+        return { refreshSession: { ok: true, user: { email: "ops@example.com" } } } as TResult;
+      }
+      if (document === "REGISTER_BEGIN") {
+        return { registerBegin: { kdfSaltBase64: saltBase64 } } as TResult;
+      }
+      if (document === "REGISTER_COMPLETE") {
+        return {
+          registerComplete: {
+            ok: true,
+            user: { email: String((variables as { email: string }).email) },
+          },
+        } as TResult;
+      }
+
+      throw new Error(`Unexpected mutation ${String(document)}.`);
     },
-    async login(email) {
-      return { ok: true, user: { email } };
-    },
-    async logout() {
-      return true;
-    },
-    async refresh() {
-      return { ok: true, user: { email: "ops@example.com" } };
-    },
-    async registerBegin() {
-      return { kdfSaltBase64: saltBase64 };
-    },
-    async registerComplete(email) {
-      return { ok: true, user: { email } };
+    async query<TResult, TVariables = Record<string, unknown>>(document: unknown, _variables?: TVariables) {
+      if (document === "KDF_SALT") {
+        return { kdfSalt: saltBase64 } as TResult;
+      }
+
+      throw new Error(`Unexpected query ${String(document)}.`);
     },
   };
+
+  return createGraphqlPasswordAuthConfig<{ email: string }>({
+    documents: {
+      getKdfSalt: "KDF_SALT",
+      login: "LOGIN",
+      logout: "LOGOUT",
+      refresh: "REFRESH",
+      registerBegin: "REGISTER_BEGIN",
+      registerComplete: "REGISTER_COMPLETE",
+    },
+    transport,
+  });
+}
+
+function createRestAuth(): ReturnType<typeof createRestPasswordAuthConfig<{ email: string }>> {
+  const transport: RestTransport = {
+    async request<TResult, TBody = unknown>(request: { body?: TBody; method: string; path: string }) {
+      if (request.method === "GET" && request.path === "/auth/kdf-salt") {
+        return { kdfSaltBase64: saltBase64 } as TResult;
+      }
+      if (request.method === "POST" && request.path === "/auth/login") {
+        const body = request.body as { email: string };
+        return { ok: true, user: { email: body.email } } as TResult;
+      }
+      if (request.method === "POST" && request.path === "/auth/logout") {
+        return true as TResult;
+      }
+      if (request.method === "POST" && request.path === "/auth/refresh") {
+        return { ok: true, user: { email: "ops@example.com" } } as TResult;
+      }
+      if (request.method === "POST" && request.path === "/auth/register-begin") {
+        return { kdfSaltBase64: saltBase64 } as TResult;
+      }
+      if (request.method === "POST" && request.path === "/auth/register-complete") {
+        const body = request.body as { email: string };
+        return { ok: true, user: { email: body.email } } as TResult;
+      }
+
+      throw new Error(`Unexpected request ${request.method} ${request.path}.`);
+    },
+  };
+
+  return createRestPasswordAuthConfig<{ email: string }>({ transport });
 }
 
 describe("E2eeBackend", () => {
@@ -108,7 +168,7 @@ describe("E2eeBackend", () => {
     });
 
     const backend = createE2eeBackend({
-      authAdapter: createAuthAdapter(),
+      auth: createGraphqlAuth(),
       defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
       storage: store,
     }).registerModel(
@@ -165,7 +225,7 @@ describe("E2eeBackend", () => {
   it("supports lazily created services and clears managed state on logout", async () => {
     const store = new SharedStore();
     const backend = createE2eeBackend({
-      authAdapter: createAuthAdapter(),
+      auth: createRestAuth(),
       defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
       storage: store,
     }).registerService("externalApis", () => ({

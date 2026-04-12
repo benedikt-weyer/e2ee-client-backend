@@ -1,7 +1,8 @@
 import {
+  createPasswordAuthAdapterFromConfig,
   createPasswordAuthClient,
-  type PasswordAuthAdapter,
   type PasswordAuthAttempt,
+  type PasswordAuthConfig,
   type PasswordAuthResult,
   normalizeAuthEmail,
 } from "./auth/password-auth-client";
@@ -65,7 +66,7 @@ export interface E2eeBackendOptions<
   TUser = never,
   TServices extends Record<string, any> = {},
 > {
-  authAdapter?: PasswordAuthAdapter<TUser>;
+  auth?: PasswordAuthConfig<TUser>;
   cacheFactory?: CreateEntityClientOptions<any>["cacheFactory"];
   contextResolver?: StrategyContextResolver<any, any>;
   defaultStrategyId?: EncryptionAlgorithmId;
@@ -143,16 +144,20 @@ function resolveStateStore(args: {
     };
   }
 
-  if (storage === E2eeBackendStorageStrategy.Memory || typeof window === "undefined") {
+  if (
+    storage === E2eeBackendStorageStrategy.Memory ||
+    globalThis.window === undefined
+  ) {
     return {
       stateStore: new MemoryStateStore(),
       storageStrategy: storage,
     };
   }
 
+  const browserWindow = globalThis.window;
   const webStorage = storage === E2eeBackendStorageStrategy.LocalStorage
-    ? window.localStorage
-    : window.sessionStorage;
+    ? browserWindow.localStorage
+    : browserWindow.sessionStorage;
 
   return {
     stateStore: new WebStorageStateStore(webStorage, args.storageKey),
@@ -188,8 +193,8 @@ export class E2eeBackend<
     options: E2eeBackendOptions<TModels, TUser, TServices> = {},
   ) {
     this.options = options;
-    this.authClient = options.authAdapter
-      ? createPasswordAuthClient(options.authAdapter)
+    this.authClient = options.auth
+      ? createPasswordAuthClient(createPasswordAuthAdapterFromConfig(options.auth))
       : null;
     const storageKey = options.storageKey ?? DEFAULT_STORAGE_KEY;
     const { stateStore, storageStrategy } = resolveStateStore({
@@ -472,7 +477,7 @@ export class E2eeBackend<
   private ensureAuthClient() {
     if (!this.authClient) {
       throw new Error(
-        "This E2eeBackend instance was created without a password auth adapter.",
+        "This E2eeBackend instance was created without password auth configuration.",
       );
     }
 

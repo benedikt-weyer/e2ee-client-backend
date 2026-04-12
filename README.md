@@ -12,7 +12,7 @@ Minimal GraphQL and REST `E2eeBackend` examples are documented in `docs/user/e2e
 
 Those examples show the full shape of:
 
-- a `PasswordAuthAdapter` that talks to your auth endpoints
+- built-in `auth` configuration that lets `E2eeBackend` create the password auth adapter internally
 - a `GraphqlCrudAdapter` built on `createGraphqlTransport(...)`
 - a `RestCrudAdapter` built on `createFetchRestTransport(...)`
 - `createE2eeBackend(...)` using the same model with either protocol

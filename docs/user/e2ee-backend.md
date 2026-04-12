@@ -18,7 +18,7 @@ It sits above `defineEntityModel(...)` and `createEntityClient(...)` and gives y
 
 An `E2eeBackend` instance can manage these concerns together:
 
-- password-based login and registration through a `PasswordAuthAdapter`
+- password-based login and registration through built-in auth configuration
 - storage of the managed password and derived encryption key
 - automatic `contextResolver.resolve(...)` key injection for encrypted fields
 - registration of model-backed clients
@@ -50,10 +50,10 @@ import {
   E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
-  type PasswordAuthAdapter,
   GraphqlCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
+  createGraphqlPasswordAuthConfig,
   createGraphqlTransport,
   createStrategyRegistry,
   defineClientModel,
@@ -72,45 +72,64 @@ type NoteRemoteRecord = {
   title: string;
 };
 
-const authAdapter: PasswordAuthAdapter<SessionUser> = {
-  async getKdfSalt(email) {
-    const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
-    const data = await response.json();
-    return data.kdfSaltBase64;
-  },
-  async login(email, authKeyMaterialHex) {
-    const response = await fetch("/api/auth/login", {
-      body: JSON.stringify({ authKeyMaterialHex, email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    return true;
-  },
-  async refresh() {
-    const response = await fetch("/api/auth/refresh", { method: "POST" });
-    return response.json();
-  },
-  async registerBegin(email) {
-    const response = await fetch("/api/auth/register-begin", {
-      body: JSON.stringify({ email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async registerComplete(email, authKeyMaterialHex) {
-    const response = await fetch("/api/auth/register-complete", {
-      body: JSON.stringify({ authKeyMaterialHex, email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-};
+const KDF_SALT = `
+  query KdfSalt($email: String!) {
+    kdfSalt(email: $email)
+  }
+`;
+
+const LOGIN = `
+  mutation Login($email: String!, $authKeyMaterialHex: String!) {
+    login(email: $email, authKeyMaterialHex: $authKeyMaterialHex) {
+      ok
+      message
+      user {
+        id
+        email
+      }
+    }
+  }
+`;
+
+const LOGOUT = `
+  mutation Logout {
+    logout
+  }
+`;
+
+const REFRESH = `
+  mutation RefreshSession {
+    refreshSession {
+      ok
+      message
+      user {
+        id
+        email
+      }
+    }
+  }
+`;
+
+const REGISTER_BEGIN = `
+  mutation RegisterBegin($email: String!) {
+    registerBegin(email: $email) {
+      kdfSaltBase64
+    }
+  }
+`;
+
+const REGISTER_COMPLETE = `
+  mutation RegisterComplete($email: String!, $authKeyMaterialHex: String!) {
+    registerComplete(email: $email, authKeyMaterialHex: $authKeyMaterialHex) {
+      ok
+      message
+      user {
+        id
+        email
+      }
+    }
+  }
+`;
 
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
@@ -139,6 +158,18 @@ const graphqlTransport = createGraphqlTransport(async ({ document, kind, variabl
   }
 
   return payload.data;
+});
+
+const auth = createGraphqlPasswordAuthConfig<SessionUser>({
+  documents: {
+    getKdfSalt: KDF_SALT,
+    login: LOGIN,
+    logout: LOGOUT,
+    refresh: REFRESH,
+    registerBegin: REGISTER_BEGIN,
+    registerComplete: REGISTER_COMPLETE,
+  },
+  transport: graphqlTransport,
 });
 
 const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
@@ -207,7 +238,7 @@ const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
 );
 
 const graphqlBackend = createE2eeBackend({
-  authAdapter,
+  auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
@@ -238,10 +269,10 @@ import {
   E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
-  type PasswordAuthAdapter,
   GraphqlCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
+  createGraphqlPasswordAuthConfig,
   createGraphqlTransport,
   createStrategyRegistry,
   defineClientModel,
@@ -266,46 +297,6 @@ type NoteRemoteRecord = {
   title: string;
 };
 
-const authAdapter: PasswordAuthAdapter<SessionUser> = {
-  async getKdfSalt(email) {
-    const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
-    const data = await response.json();
-    return data.kdfSaltBase64;
-  },
-  async login(email, authKeyMaterialHex) {
-    const response = await fetch("/api/auth/login", {
-      body: JSON.stringify({ authKeyMaterialHex, email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    return true;
-  },
-  async refresh() {
-    const response = await fetch("/api/auth/refresh", { method: "POST" });
-    return response.json();
-  },
-  async registerBegin(email) {
-    const response = await fetch("/api/auth/register-begin", {
-      body: JSON.stringify({ email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async registerComplete(email, authKeyMaterialHex) {
-    const response = await fetch("/api/auth/register-complete", {
-      body: JSON.stringify({ authKeyMaterialHex, email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-};
-
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
   fields: {
@@ -316,6 +307,65 @@ const noteModel = defineEntityModel({
   idField: "id",
   name: "note",
 });
+
+const GET_KDF_SALT = gql`
+  query KdfSalt($email: String!) {
+    kdfSalt(email: $email)
+  }
+`;
+
+const LOGIN = gql`
+  mutation Login($email: String!, $authKeyMaterialHex: String!) {
+    login(email: $email, authKeyMaterialHex: $authKeyMaterialHex) {
+      ok
+      message
+      user {
+        id
+        email
+      }
+    }
+  }
+`;
+
+const LOGOUT = gql`
+  mutation Logout {
+    logout
+  }
+`;
+
+const REFRESH = gql`
+  mutation RefreshSession {
+    refreshSession {
+      ok
+      message
+      user {
+        id
+        email
+      }
+    }
+  }
+`;
+
+const REGISTER_BEGIN = gql`
+  mutation RegisterBegin($email: String!) {
+    registerBegin(email: $email) {
+      kdfSaltBase64
+    }
+  }
+`;
+
+const REGISTER_COMPLETE = gql`
+  mutation RegisterComplete($email: String!, $authKeyMaterialHex: String!) {
+    registerComplete(email: $email, authKeyMaterialHex: $authKeyMaterialHex) {
+      ok
+      message
+      user {
+        id
+        email
+      }
+    }
+  }
+`;
 
 const CREATE_NOTE = gql`
   mutation CreateNote($input: NoteInput!) {
@@ -386,6 +436,18 @@ function createApolloGraphqlTransport(
 
 declare const apolloClient: ApolloClient<NormalizedCacheObject>;
 
+const auth = createGraphqlPasswordAuthConfig<SessionUser>({
+  documents: {
+    getKdfSalt: GET_KDF_SALT,
+    login: LOGIN,
+    logout: LOGOUT,
+    refresh: REFRESH,
+    registerBegin: REGISTER_BEGIN,
+    registerComplete: REGISTER_COMPLETE,
+  },
+  transport: createApolloGraphqlTransport(apolloClient),
+});
+
 const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
   createApolloGraphqlTransport(apolloClient),
   {
@@ -416,7 +478,7 @@ const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
 );
 
 const apolloBackend = createE2eeBackend({
-  authAdapter,
+  auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
@@ -447,11 +509,11 @@ import {
   E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
-  type PasswordAuthAdapter,
   RestCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
   createFetchRestTransport,
+  createRestPasswordAuthConfig,
   createStrategyRegistry,
   defineClientModel,
   defineEntityModel,
@@ -467,46 +529,6 @@ type NoteRemoteRecord = {
   content: EncryptedFieldValue;
   id: string;
   title: string;
-};
-
-const authAdapter: PasswordAuthAdapter<SessionUser> = {
-  async getKdfSalt(email) {
-    const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
-    const data = await response.json();
-    return data.kdfSaltBase64;
-  },
-  async login(email, authKeyMaterialHex) {
-    const response = await fetch("/api/auth/login", {
-      body: JSON.stringify({ authKeyMaterialHex, email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    return true;
-  },
-  async refresh() {
-    const response = await fetch("/api/auth/refresh", { method: "POST" });
-    return response.json();
-  },
-  async registerBegin(email) {
-    const response = await fetch("/api/auth/register-begin", {
-      body: JSON.stringify({ email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async registerComplete(email, authKeyMaterialHex) {
-    const response = await fetch("/api/auth/register-complete", {
-      body: JSON.stringify({ authKeyMaterialHex, email }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
 };
 
 const noteModel = defineEntityModel({
@@ -527,6 +549,10 @@ const restTransport = createFetchRestTransport({
   },
 });
 
+const auth = createRestPasswordAuthConfig<SessionUser>({
+  transport: restTransport,
+});
+
 const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
   create: { path: "/notes" },
   delete: { path: (id) => `/notes/${id}` },
@@ -536,7 +562,7 @@ const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport,
 });
 
 const restBackend = createE2eeBackend({
-  authAdapter,
+  auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
@@ -562,13 +588,13 @@ await restNotes.create({
 
 The important point is that you never provide a manual `contextResolver`. The backend stores the managed encryption key and injects it automatically when repository operations need to encrypt or decrypt fields.
 
-In both examples, `authAdapter` and the CRUD adapter are application code. `authAdapter` connects password auth to your backend, and the GraphQL or REST adapter connects one model's remote CRUD operations to your API.
+The built-in `auth` configuration creates the password auth adapter internally. You only provide transport-level auth configuration plus the CRUD adapter for each model.
 
 `defaultStrategyId` applies to every registered model in that backend unless a field or lower-level schema explicitly overrides the strategy.
 
 ## Auth Flow
 
-If you provide a `PasswordAuthAdapter`, `E2eeBackend` exposes the same high-level auth operations directly:
+If you provide `auth` configuration, `E2eeBackend` exposes the same high-level auth operations directly:
 
 - `beginRegistration(email)`
 - `completeRegistrationWithPassword(email, password, kdfSaltBase64)`

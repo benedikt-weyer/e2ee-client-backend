@@ -12,8 +12,36 @@ The package source is organized by responsibility:
 - `src/encoding`: byte and base64 helpers
 - `src/external-e2ee`: generic interfaces for external encrypted API clients
 - `src/repositories`: the encrypted entity repository layer
+- `src/schema-builder.ts`: Prisma-like model definitions compiled into repository schemas
 - `src/schemas`: reusable entity schemas
 - `tests`: Vitest coverage for the public building blocks
+
+## Model Definition Layer
+
+The preferred public API is now `defineEntityModel` plus the `field` builder helpers.
+
+That layer sits above the lower-level `EntitySchema` contract and generates:
+
+- `createEntity` and `createRemote` mappings
+- encrypted field policies for the repository
+- runtime validation for entity input and remote payloads
+
+Use the lower-level `EntitySchema` interface only when you need behavior that cannot be expressed with the builder.
+
+Typical example:
+
+```ts
+const model = defineEntityModel({
+	fields: {
+		id: field.string(),
+		profile: field.json(profileSchema).encrypted(),
+	},
+	idField: "id",
+	name: "user",
+});
+```
+
+For structured fields, always prefer `field.json(z.object(...))` over generic `unknown` shapes so the repository can validate before encrypting and after decrypting.
 
 ## Local Development
 

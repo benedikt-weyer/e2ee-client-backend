@@ -1,5 +1,6 @@
 import type { EncryptedFieldValue } from "../crypto/types";
 import type { EntitySchema } from "../repositories/entity-repository";
+import { defineEntityModel, field } from "../schema-builder";
 
 type IntegrationRemoteFieldValue = EncryptedFieldValue | string | null;
 
@@ -34,53 +35,23 @@ export interface IntegrationRemoteRecord {
 export function createIntegrationSchema(
   strategyId = "aes-256-gcm",
 ): EntitySchema<IntegrationEntity, IntegrationRemoteRecord, string> {
-  return {
+  return defineEntityModel({
     cacheCollection: "integrations",
-    createEntity(remote) {
-      return {
-        apiUrl: remote.apiUrl,
-        authHash: (remote.authHash as string | null) ?? null,
-        credentialMode: remote.credentialMode,
-        displayName: remote.displayName,
-        encryptionKey: (remote.encryptionKey as string | null) ?? null,
-        id: remote.id,
-        lastSyncedAt: remote.lastSyncedAt,
-        provider: remote.provider,
-        providerSecret: (remote.providerSecret as string | null) ?? null,
-        status: remote.status,
-        username: remote.username,
-      };
-    },
-    createRemote(entity) {
-      return {
-        apiUrl: entity.apiUrl,
-        authHash: entity.authHash,
-        credentialMode: entity.credentialMode,
-        displayName: entity.displayName,
-        encryptionKey: entity.encryptionKey,
-        id: entity.id,
-        lastSyncedAt: entity.lastSyncedAt,
-        provider: entity.provider,
-        providerSecret: entity.providerSecret,
-        status: entity.status,
-        username: entity.username,
-      };
-    },
     defaultStrategyId: strategyId,
-    fields: [
-      {
-        encrypted: true,
-        entityPath: "authHash",
-      },
-      {
-        encrypted: true,
-        entityPath: "providerSecret",
-      },
-      {
-        encrypted: true,
-        entityPath: "encryptionKey",
-      },
-    ],
+    fields: {
+      apiUrl: field.string(),
+      authHash: field.string().nullable().encrypted(),
+      credentialMode: field.string(),
+      displayName: field.string(),
+      encryptionKey: field.string().nullable().encrypted(),
+      id: field.string(),
+      lastSyncedAt: field.string().nullable(),
+      provider: field.string(),
+      providerSecret: field.string().nullable().encrypted(),
+      status: field.string(),
+      username: field.string(),
+    },
+    idField: "id",
     name: "integration",
-  };
+  });
 }

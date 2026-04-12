@@ -94,6 +94,8 @@ export interface EntitySchema<TEntity, TRemote, TId = string> {
   fields: FieldPolicy<TEntity, TRemote>[];
   idPath?: string;
   name: string;
+  parseEntity?: (entity: unknown) => TEntity;
+  parseRemote?: (remote: unknown) => TRemote;
 }
 
 export interface StrategyContextResolver<TEntity, TRemote> {
@@ -129,7 +131,8 @@ export class EntityRepository<TEntity, TRemote, TId = string> {
   }
 
   public async create(entity: TEntity): Promise<TEntity> {
-    const remote = await this.serializeEntity(entity);
+    const validatedEntity = this.parseEntity(entity);
+    const remote = await this.serializeEntity(validatedEntity);
     const created = await this.options.adapter.create(remote);
     return this.hydrateRemote(created, true);
   }
@@ -189,19 +192,23 @@ export class EntityRepository<TEntity, TRemote, TId = string> {
   }
 
   public async update(id: TId, entity: TEntity): Promise<TEntity> {
-    const remote = await this.serializeEntity(entity);
+    const validatedEntity = this.parseEntity(entity);
+    const remote = await this.serializeEntity(validatedEntity);
     const updated = await this.options.adapter.update(id, remote);
     return this.hydrateRemote(updated, true);
   }
 
   private async hydrateRemote(remote: TRemote, storeInCache: boolean): Promise<TEntity> {
-    const workingRemote = cloneValue(remote) as JsonObject;
+    const parsedRemote = this.parseRemote(remote);
+    const workingRemote = cloneValue(parsedRemote) as JsonObject;
 
     for (const field of this.options.schema.fields) {
-      await this.hydrateField(remote, workingRemote, field);
+      await this.hydrateField(parsedRemote, workingRemote, field);
     }
 
-    const entity = this.options.schema.createEntity(workingRemote as TRemote);
+    const entity = this.parseEntity(
+      this.options.schema.createEntity(workingRemote as TRemote),
+    );
     if (storeInCache && this.options.cache) {
       this.options.cache.put(
         this.cacheCollection,
@@ -297,7 +304,19 @@ export class EntityRepository<TEntity, TRemote, TId = string> {
       setByPath(remote, remotePath, serializedValue);
     }
 
-    return remote as TRemote;
+    return this.parseRemote(remote as TRemote);
+  }
+
+  private parseEntity(entity: unknown): TEntity {
+    return this.options.schema.parseEntity
+      ? this.options.schema.parseEntity(entity)
+      : (entity as TEntity);
+  }
+
+  private parseRemote(remote: unknown): TRemote {
+    return this.options.schema.parseRemote
+      ? this.options.schema.parseRemote(remote)
+      : (remote as TRemote);
   }
 }
 

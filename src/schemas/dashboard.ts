@@ -1,5 +1,7 @@
 import type { EncryptedFieldValue } from "../crypto/types";
 import type { EntitySchema } from "../repositories/entity-repository";
+import { defineEntityModel, field } from "../schema-builder";
+import { z } from "zod";
 
 export interface DashboardEntity<TConfig = Record<string, unknown>> {
   config: TConfig | null;
@@ -17,37 +19,34 @@ export interface DashboardRemoteRecord<TConfig = Record<string, unknown>> {
   updatedAt: string;
 }
 
+export interface DashboardSchemaOptions<TConfig = Record<string, unknown>> {
+  configSchema?: z.ZodType<TConfig>;
+  strategyId?: string;
+}
+
 export function createDashboardSchema<TConfig = Record<string, unknown>>(
-  strategyId = "aes-256-gcm",
+  options: DashboardSchemaOptions<TConfig> | string = "aes-256-gcm",
 ): EntitySchema<DashboardEntity<TConfig>, DashboardRemoteRecord<TConfig>, string> {
-  return {
+  const resolvedOptions =
+    typeof options === "string" ? { strategyId: options } : options;
+  const configSchema =
+    resolvedOptions.configSchema ?? z.custom<TConfig>(() => true);
+
+  return defineEntityModel({
     cacheCollection: "dashboards",
-    createEntity(remote) {
-      return {
-        config: (remote.configEnvelope as TConfig | null) ?? null,
-        createdAt: remote.createdAt,
-        id: remote.id,
-        name: remote.name,
-        updatedAt: remote.updatedAt,
-      };
+    defaultStrategyId: resolvedOptions.strategyId ?? "aes-256-gcm",
+    fields: {
+      config: field
+        .json(configSchema)
+        .nullable()
+        .remote("configEnvelope")
+        .encrypted(),
+      createdAt: field.string(),
+      id: field.string(),
+      name: field.string(),
+      updatedAt: field.string(),
     },
-    createRemote(entity) {
-      return {
-        configEnvelope: entity.config,
-        createdAt: entity.createdAt,
-        id: entity.id,
-        name: entity.name,
-        updatedAt: entity.updatedAt,
-      };
-    },
-    defaultStrategyId: strategyId,
-    fields: [
-      {
-        encrypted: true,
-        entityPath: "config",
-        remotePath: "configEnvelope",
-      },
-    ],
+    idField: "id",
     name: "dashboard",
-  };
+  });
 }

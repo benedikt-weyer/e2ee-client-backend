@@ -26,13 +26,74 @@ The package is designed for browser-first usage.
 
 Most integrations follow this order:
 
-1. Create or choose a crypto strategy.
-2. Create a strategy registry.
-3. Define or reuse an entity schema.
-4. Build a CRUD adapter over GraphQL or REST.
-5. Create a cache store.
-6. Provide a context resolver that returns the encryption key.
-7. Create an entity repository and use it from application code.
+1. Define a model with the field builder API.
+2. Mark the fields that should be end-to-end encrypted.
+3. Create or choose a crypto strategy.
+4. Create a strategy registry.
+5. Build a CRUD adapter over GraphQL or REST.
+6. Create a cache store.
+7. Provide a context resolver that returns the encryption key.
+8. Create an entity repository and use it from application code.
+
+## Preferred Model API
+
+The simplest package entrypoint is `defineEntityModel`.
+
+It lets you describe the entity in one place, similar to a Prisma model, and mark encrypted fields inline.
+
+```ts
+import { z } from "zod";
+import {
+  createAes256GcmStrategy,
+  createEntityRepository,
+  createLokiCacheStore,
+  createStrategyRegistry,
+  defineEntityModel,
+  field,
+} from "e2ee-client-backend";
+
+const dashboardModel = defineEntityModel({
+  cacheCollection: "dashboards",
+  defaultStrategyId: "aes-256-gcm",
+  fields: {
+    id: field.string(),
+    name: field.string(),
+    config: field
+      .json(
+        z.object({
+          layout: z.enum(["grid", "list"]),
+          showFilters: z.boolean(),
+        }),
+      )
+      .nullable()
+      .remote("configEnvelope")
+      .encrypted(),
+  },
+  idField: "id",
+  name: "dashboard",
+});
+
+const repository = createEntityRepository({
+  adapter,
+  cache: createLokiCacheStore(),
+  contextResolver: {
+    async resolve() {
+      return {
+        key: crypto.getRandomValues(new Uint8Array(32)),
+      };
+    },
+  },
+  schema: dashboardModel,
+  strategies: createStrategyRegistry(createAes256GcmStrategy()),
+});
+```
+
+This layer adds runtime validation automatically.
+
+- Primitive builders like `field.string()` and `field.boolean()` validate out of the box.
+- Structured values should use `field.json(z.object(...))` so the package can validate before encrypting and after decrypting.
+- `remote("configEnvelope")` lets the local entity key differ from the backend field name.
+- `encrypted()` marks the field for repository-managed encryption.
 
 ## Example: Repository with AES-256-GCM
 
@@ -40,9 +101,10 @@ Most integrations follow this order:
 import {
   createAes256GcmStrategy,
   createEntityRepository,
-  createIntegrationSchema,
   createLokiCacheStore,
   createStrategyRegistry,
+  defineEntityModel,
+  field,
   type CrudAdapter,
   type IntegrationRemoteRecord,
 } from "e2ee-client-backend";
@@ -63,6 +125,20 @@ const adapter: CrudAdapter<IntegrationRemoteRecord, string> = {
   },
 };
 
+const integrationModel = defineEntityModel({
+  cacheCollection: "integrations",
+  defaultStrategyId: "aes-256-gcm",
+  fields: {
+    apiUrl: field.string(),
+    authHash: field.string().nullable().encrypted(),
+    displayName: field.string(),
+    id: field.string(),
+    provider: field.string(),
+  },
+  idField: "id",
+  name: "integration",
+});
+
 const repository = createEntityRepository({
   adapter,
   cache: createLokiCacheStore(),
@@ -73,10 +149,12 @@ const repository = createEntityRepository({
       };
     },
   },
-  schema: createIntegrationSchema(),
+  schema: integrationModel,
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 ```
+
+If you prefer the package-provided schemas, helpers like `createIntegrationSchema()` and `createDashboardSchema()` still work.
 
 ## GraphQL and REST Adapters
 

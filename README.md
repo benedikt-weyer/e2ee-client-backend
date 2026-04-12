@@ -105,7 +105,7 @@ The repository includes a manual workflow at `.github/workflows/release-npm.yml`
 - Choose whether the next release should bump `patch`, `minor`, or `major`.
 - The workflow calculates the next version from the latest semantic git tag.
 - If no semantic tag exists yet, it falls back to the current `package.json` version and increments from there.
-- It updates `package.json` in the workflow workspace, publishes to npmjs, and only after a successful publish creates the release commit, creates the `vX.Y.Z` git tag, and pushes both back to GitHub.
+- It updates `package.json` in the workflow workspace, tries npm Trusted Publishing first, optionally retries with `NPM_TOKEN` if that fallback secret exists, and only after a successful publish creates the release commit, creates the `vX.Y.Z` git tag, and pushes both back to GitHub.
 
 ## Trusted Publishing
 
@@ -113,7 +113,7 @@ The release workflow is configured for GitHub Actions OIDC Trusted Publishing:
 
 - The workflow already requests `id-token: write` in `.github/workflows/release-npm.yml`.
 - The publish script automatically adds `--provenance` when it runs inside GitHub Actions.
-- Once Trusted Publishing is configured in npm, the GitHub workflow does not need `NPM_TOKEN`.
+- Once Trusted Publishing is configured in npm, the GitHub workflow should succeed without `NPM_TOKEN`; the token is now used only as an explicit fallback retry.
 
 To enable Trusted Publishing on npmjs:
 
@@ -134,4 +134,4 @@ If the package does not exist on npm yet and npm does not let you configure Trus
 
 Optional fallback secret:
 
-- `NPM_TOKEN`: optional fallback for token-based publishing. The release workflow now passes it through automatically if the secret is configured.
+- `NPM_TOKEN`: optional fallback for token-based publishing. The release workflow now tries OIDC first and only uses this token on a retry if the first publish attempt fails.

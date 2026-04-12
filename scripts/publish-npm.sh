@@ -21,7 +21,11 @@ repo_root=$(cd -- "$script_dir/.." && pwd)
 
 cd "$repo_root"
 
-if [[ -z "${NODE_AUTH_TOKEN:-}" && -n "${NPM_TOKEN:-}" ]]; then
+if [[
+  ("${GITHUB_ACTIONS:-false}" != "true" || "${NPM_PUBLISH_PREFER_TOKEN:-false}" == "true") &&
+  -z "${NODE_AUTH_TOKEN:-}" &&
+  -n "${NPM_TOKEN:-}"
+]]; then
   export NODE_AUTH_TOKEN="$NPM_TOKEN"
 fi
 

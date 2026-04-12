@@ -24,6 +24,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
 
     steps:
       - name: Check out repository
@@ -61,10 +63,22 @@ jobs:
       - name: Update package version
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
 
-      - name: Publish to npmjs
+      - name: Publish to npmjs with Trusted Publishing
+        id: publish_oidc
+        continue-on-error: true
+        run: ./scripts/publish-npm.sh
+
+      - name: Publish to npmjs with NPM_TOKEN fallback
+        id: publish_token
+        if: steps.publish_oidc.outcome == 'failure' && env.HAS_NPM_TOKEN == 'true'
         env:
+          NPM_PUBLISH_PREFER_TOKEN: "true"
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: ./scripts/publish-npm.sh
+
+      - name: Fail if publish did not succeed
+        if: steps.publish_oidc.outcome == 'failure' && (env.HAS_NPM_TOKEN != 'true' || steps.publish_token.outcome == 'failure')
+        run: exit 1
 
       - name: Commit release version
         run: |

@@ -14,6 +14,7 @@ Use direct repository wiring only when you need lower-level control, such as:
 
 ```ts
 import {
+  E2eeEncryptionStrategy,
   createAes256GcmStrategy,
   createEntityRepository,
   createLokiCacheStore,
@@ -24,7 +25,7 @@ import {
 
 const dashboardSchema = defineEntityModel({
   cacheCollection: "dashboards",
-  defaultStrategyId: "aes-256-gcm",
+  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   fields: {
     id: field.string(),
     name: field.string(),

@@ -3,6 +3,7 @@ import type { CrudAdapter } from "../src/adapters/contracts";
 import { createLokiCacheStore } from "../src/cache/loki-cache";
 import { createAes256GcmStrategy } from "../src/crypto/aes-gcm-strategy";
 import { createStrategyRegistry } from "../src/crypto/strategy-registry";
+import { E2eeEncryptionStrategy } from "../src/crypto/types";
 import { createEntityRepository, type StrategyContextResolver } from "../src/repositories/entity-repository";
 import {
   createIntegrationSchema,
@@ -52,7 +53,7 @@ describe("entity repository", () => {
       adapter,
       cache: createLokiCacheStore<IntegrationEntity, string>(),
       contextResolver: resolver,
-      schema: createIntegrationSchema(),
+      schema: createIntegrationSchema(E2eeEncryptionStrategy.Aes256Gcm),
       strategies: createStrategyRegistry(createAes256GcmStrategy()),
     });
 
@@ -76,9 +77,9 @@ describe("entity repository", () => {
     expect(saved).toEqual(entity);
     expect(remote?.apiUrl).toBe(entity.apiUrl);
     expect(remote?.username).toBe(entity.username);
-    expect(remote?.authHash).toMatchObject({ algorithm: "aes-256-gcm", version: 1 });
-    expect(remote?.providerSecret).toMatchObject({ algorithm: "aes-256-gcm", version: 1 });
-    expect(remote?.encryptionKey).toMatchObject({ algorithm: "aes-256-gcm", version: 1 });
+    expect(remote?.authHash).toMatchObject({ algorithm: E2eeEncryptionStrategy.Aes256Gcm, version: 1 });
+    expect(remote?.providerSecret).toMatchObject({ algorithm: E2eeEncryptionStrategy.Aes256Gcm, version: 1 });
+    expect(remote?.encryptionKey).toMatchObject({ algorithm: E2eeEncryptionStrategy.Aes256Gcm, version: 1 });
 
     adapter.items.clear();
 

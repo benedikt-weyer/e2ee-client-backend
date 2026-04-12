@@ -1,4 +1,7 @@
-import type { EncryptedFieldValue } from "../crypto/types";
+import {
+  type EncryptionAlgorithmId,
+  type EncryptedFieldValue,
+} from "../crypto/types";
 import type { EntitySchema } from "../repositories/entity-repository";
 import { defineEntityModel, field } from "../schema-builder";
 
@@ -33,11 +36,10 @@ export interface IntegrationRemoteRecord {
 }
 
 export function createIntegrationSchema(
-  strategyId = "aes-256-gcm",
+  strategyId?: EncryptionAlgorithmId,
 ): EntitySchema<IntegrationEntity, IntegrationRemoteRecord, string> {
-  return defineEntityModel({
+  const model = defineEntityModel({
     cacheCollection: "integrations",
-    defaultStrategyId: strategyId,
     fields: {
       apiUrl: field.string(),
       authHash: field.string().nullable().encrypted(),
@@ -54,4 +56,10 @@ export function createIntegrationSchema(
     idField: "id",
     name: "integration",
   });
+
+  if (strategyId) {
+    model.defaultStrategyId = strategyId;
+  }
+
+  return model;
 }

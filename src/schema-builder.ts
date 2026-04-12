@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  type EncryptionAlgorithmId,
   type EncryptedFieldValue,
   isEncryptedFieldValue,
 } from "./crypto/types";
@@ -71,7 +72,7 @@ interface ModelFieldConfig<
   remotePath: TRemotePath;
   remoteSchema: z.ZodType<TRemotePlainValue>;
   serialize: ((value: TEntityValue, entity: JsonObject) => TRemotePlainValue) | undefined;
-  strategyId: string | undefined;
+  strategyId: EncryptionAlgorithmId | undefined;
 }
 
 export class ModelFieldBuilder<
@@ -93,7 +94,7 @@ export class ModelFieldBuilder<
     >,
   ) {}
 
-  public encrypted(options: { strategyId?: string } = {}): ModelFieldBuilder<
+  public encrypted(options: { strategyId?: EncryptionAlgorithmId } = {}): ModelFieldBuilder<
     TEntityValue,
     TRemotePlainValue,
     TRemotePath,
@@ -216,7 +217,7 @@ export interface DefineEntityModelOptions<
   TIdField extends Extract<keyof TFields, string> | undefined = undefined,
 > {
   cacheCollection?: string;
-  defaultStrategyId?: string;
+  defaultStrategyId?: EncryptionAlgorithmId;
   fields: TFields;
   idField?: TIdField;
   name: string;

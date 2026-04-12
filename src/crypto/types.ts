@@ -1,6 +1,9 @@
-export type EncryptionAlgorithmId =
-  | "aes-256-gcm"
-  | "ml-kem-768-aes-256-gcm";
+export enum E2eeEncryptionStrategy {
+  Aes256Gcm = "aes-256-gcm",
+  MlKem768Aes256Gcm = "ml-kem-768-aes-256-gcm",
+}
+
+export type EncryptionAlgorithmId = `${E2eeEncryptionStrategy}`;
 
 export type EncryptedFieldMetadata = Record<
   string,
@@ -9,7 +12,7 @@ export type EncryptedFieldMetadata = Record<
 
 export interface EncryptedFieldValue {
   version: 1;
-  algorithm: string;
+  algorithm: EncryptionAlgorithmId;
   ciphertextBase64: string;
   nonceBase64?: string;
   encapsulatedKeyCiphertextBase64?: string;
@@ -20,7 +23,7 @@ export interface EncryptionStrategy<
   TEncryptContext = unknown,
   TDecryptContext = TEncryptContext,
 > {
-  readonly id: string;
+  readonly id: EncryptionAlgorithmId;
   encrypt(
     plaintext: Uint8Array,
     context: TEncryptContext,

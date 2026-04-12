@@ -1,4 +1,5 @@
 import type { EncryptedFieldValue } from "../crypto/types";
+import { type EncryptionAlgorithmId } from "../crypto/types";
 import type { EntitySchema } from "../repositories/entity-repository";
 import { defineEntityModel, field } from "../schema-builder";
 import { z } from "zod";
@@ -21,20 +22,19 @@ export interface DashboardRemoteRecord<TConfig = Record<string, unknown>> {
 
 export interface DashboardSchemaOptions<TConfig = Record<string, unknown>> {
   configSchema?: z.ZodType<TConfig>;
-  strategyId?: string;
+  strategyId?: EncryptionAlgorithmId;
 }
 
 export function createDashboardSchema<TConfig = Record<string, unknown>>(
-  options: DashboardSchemaOptions<TConfig> | string = "aes-256-gcm",
+  options: DashboardSchemaOptions<TConfig> | EncryptionAlgorithmId = {},
 ): EntitySchema<DashboardEntity<TConfig>, DashboardRemoteRecord<TConfig>, string> {
   const resolvedOptions =
     typeof options === "string" ? { strategyId: options } : options;
   const configSchema =
     resolvedOptions.configSchema ?? z.custom<TConfig>(() => true);
 
-  return defineEntityModel({
+  const model = defineEntityModel({
     cacheCollection: "dashboards",
-    defaultStrategyId: resolvedOptions.strategyId ?? "aes-256-gcm",
     fields: {
       config: field
         .json(configSchema)
@@ -49,4 +49,10 @@ export function createDashboardSchema<TConfig = Record<string, unknown>>(
     idField: "id",
     name: "dashboard",
   });
+
+  if (resolvedOptions.strategyId) {
+    model.defaultStrategyId = resolvedOptions.strategyId;
+  }
+
+  return model;
 }

@@ -1,5 +1,5 @@
 import { bytesToBase64, base64ToBytes, toArrayBuffer } from "../encoding/base64";
-import type { EncryptionStrategy } from "./types";
+import { E2eeEncryptionStrategy, type EncryptionStrategy } from "./types";
 
 export interface Aes256GcmContext {
   additionalData?: Uint8Array;
@@ -9,7 +9,7 @@ export interface Aes256GcmContext {
 export class Aes256GcmStrategy
   implements EncryptionStrategy<Aes256GcmContext, Aes256GcmContext>
 {
-  public readonly id = "aes-256-gcm";
+  public readonly id = E2eeEncryptionStrategy.Aes256Gcm;
   public readonly nonceLength = 12;
 
   public async encrypt(

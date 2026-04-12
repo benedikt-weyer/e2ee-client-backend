@@ -4,14 +4,16 @@ Browser-first TypeScript client backend for end-to-end encrypted frontend data a
 
 ## Quick Start
 
-The intended entrypoint is the model builder plus the one-shot client factory.
+The intended entrypoint is `E2eeBackend` plus the model builder.
 
 If you want one stateful object to own password auth, browser storage, context resolution, model registration, and lazy client creation, use `E2eeBackend`. That higher-level API is documented in `docs/user/e2ee-backend.md`.
 
 ```ts
 import {
+	E2eeEncryptionStrategy,
+	E2eeBackendStorageStrategy,
 	createAes256GcmStrategy,
-	createEntityClient,
+	createE2eeBackend,
 	createStrategyRegistry,
 	defineClientModel,
 	defineEntityModel,
@@ -20,7 +22,6 @@ import {
 
 const dashboardModel = defineEntityModel({
 	cacheCollection: "dashboards",
-	defaultStrategyId: "aes-256-gcm",
 	fields: {
 		id: field.string(),
 		name: field.string(),
@@ -30,31 +31,32 @@ const dashboardModel = defineEntityModel({
 	name: "dashboard",
 });
 
-const client = createEntityClient({
-	contextResolver: {
-		async resolve() {
-			return {
-				key: crypto.getRandomValues(new Uint8Array(32)),
-			};
-		},
-	},
+const backend = createE2eeBackend({
+	authAdapter,
+	defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
 	models: {
 		dashboards: defineClientModel({
 			adapter,
 			schema: dashboardModel,
 		}),
 	},
+	storage: E2eeBackendStorageStrategy.LocalStorage,
+	storageKey: "dashboard.e2ee.v1",
 	strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
-await client.dashboards.create({
+await backend.loginWithPassword("ops@example.com", "top-secret-password");
+
+const dashboards = backend.getClient("dashboards");
+
+await dashboards.create({
 	id: crypto.randomUUID(),
 	name: "Main dashboard",
 	secretFilter: null,
 });
 ```
 
-Use this path unless you explicitly need low-level repository wiring. The direct `EntitySchema` plus `createEntityRepository(...)` layer is still available, but it is documented as advanced usage in `docs/user-guide.md`.
+Use this path unless you explicitly need lower-level repository wiring. If you only want repository construction without the stateful orchestration layer, use `createEntityClient(...)` directly instead.
 
 ## What is implemented
 

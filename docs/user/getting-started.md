@@ -51,6 +51,7 @@ Use `createEntityClient(...)` directly only when you want repository constructio
 
 ```ts
 import {
+  E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   createAes256GcmStrategy,
   createE2eeBackend,
@@ -62,7 +63,6 @@ import {
 
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
-  defaultStrategyId: "aes-256-gcm",
   fields: {
     id: field.string(),
     title: field.string(),
@@ -74,6 +74,7 @@ const noteModel = defineEntityModel({
 
 const backend = createE2eeBackend({
   authAdapter,
+  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
       adapter,

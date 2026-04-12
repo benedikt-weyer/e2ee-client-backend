@@ -43,6 +43,7 @@ The package default is local storage.
 
 ```ts
 import {
+  E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   createAes256GcmStrategy,
   createE2eeBackend,
@@ -54,7 +55,6 @@ import {
 
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
-  defaultStrategyId: "aes-256-gcm",
   fields: {
     id: field.string(),
     title: field.string(),
@@ -66,6 +66,7 @@ const noteModel = defineEntityModel({
 
 const backend = createE2eeBackend({
   authAdapter,
+  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
       adapter,
@@ -89,6 +90,8 @@ await notes.create({
 ```
 
 The important point is that you never provide a manual `contextResolver`. The backend stores the managed encryption key and injects it automatically when repository operations need to encrypt or decrypt fields.
+
+`defaultStrategyId` applies to every registered model in that backend unless a field or lower-level schema explicitly overrides the strategy.
 
 ## Auth Flow
 

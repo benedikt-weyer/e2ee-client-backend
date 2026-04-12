@@ -1,5 +1,9 @@
 import { createAes256GcmStrategy } from "../crypto/aes-gcm-strategy";
-import type { EncryptedFieldValue } from "../crypto/types";
+import {
+  E2eeEncryptionStrategy,
+  type EncryptedFieldValue,
+  type EncryptionAlgorithmId,
+} from "../crypto/types";
 import { bytesToUtf8, utf8ToBytes } from "../encoding/base64";
 
 export interface LegacyEncryptedJsonBlob {
@@ -46,7 +50,7 @@ export async function encryptJsonToLegacyBlob<TValue>(
 
 export function legacyBlobToEncryptedField(
   blob: LegacyEncryptedJsonBlob,
-  algorithm = "aes-256-gcm",
+  algorithm: EncryptionAlgorithmId = E2eeEncryptionStrategy.Aes256Gcm,
 ): EncryptedFieldValue {
   return {
     algorithm,

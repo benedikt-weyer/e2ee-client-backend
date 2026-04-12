@@ -1,6 +1,6 @@
 import mlkem from "mlkem-wasm";
 import { base64ToBytes, bytesToBase64, toArrayBuffer } from "../encoding/base64";
-import type { EncryptionStrategy } from "./types";
+import { E2eeEncryptionStrategy, type EncryptionStrategy } from "./types";
 
 const ML_KEM_ALGORITHM = { name: "ML-KEM-768" } as const;
 const SHARED_KEY_ALGORITHM = { name: "AES-GCM", length: 256 } as const;
@@ -62,7 +62,7 @@ export class MlKemAes256GcmStrategy
       MlKemAes256GcmDecryptContext
     >
 {
-  public readonly id = "ml-kem-768-aes-256-gcm";
+  public readonly id = E2eeEncryptionStrategy.MlKem768Aes256Gcm;
   public readonly nonceLength = 12;
 
   public async encrypt(

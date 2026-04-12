@@ -6,7 +6,10 @@ import {
   E2eeBackendStorageStrategy,
   createE2eeBackend,
 } from "../src/e2ee-backend";
-import type { EncryptedFieldValue } from "../src/crypto/types";
+import {
+  E2eeEncryptionStrategy,
+  type EncryptedFieldValue,
+} from "../src/crypto/types";
 import { bytesToBase64 } from "../src/encoding/base64";
 import { defineEntityModel, field } from "../src/schema-builder";
 import { defineClientModel } from "../src/client-factory";
@@ -95,7 +98,6 @@ describe("E2eeBackend", () => {
     }>();
 
     const noteModel = defineEntityModel({
-      defaultStrategyId: "aes-256-gcm",
       fields: {
         id: field.string(),
         name: field.string(),
@@ -107,6 +109,7 @@ describe("E2eeBackend", () => {
 
     const backend = createE2eeBackend({
       authAdapter: createAuthAdapter(),
+      defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
       storage: store,
     }).registerModel(
       "notes",
@@ -138,7 +141,7 @@ describe("E2eeBackend", () => {
       secret: "Encrypted note",
     });
     expect(adapter.items.get("note-1")?.secretEnvelope).toMatchObject({
-      algorithm: "aes-256-gcm",
+      algorithm: E2eeEncryptionStrategy.Aes256Gcm,
     });
 
     const restoredBackend = createE2eeBackend({
@@ -163,6 +166,7 @@ describe("E2eeBackend", () => {
     const store = new SharedStore();
     const backend = createE2eeBackend({
       authAdapter: createAuthAdapter(),
+      defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
       storage: store,
     }).registerService("externalApis", () => ({
       example: {

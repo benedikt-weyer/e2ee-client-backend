@@ -21,6 +21,10 @@ import {
   createStrategyRegistry,
   type StrategyRegistry,
 } from "./crypto/strategy-registry";
+import {
+  E2eeEncryptionStrategy,
+  type EncryptionAlgorithmId,
+} from "./crypto/types";
 import { base64ToBytes, bytesToBase64 } from "./encoding/base64";
 import type { StrategyContextResolver } from "./repositories/entity-repository";
 
@@ -64,6 +68,7 @@ export interface E2eeBackendOptions<
   authAdapter?: PasswordAuthAdapter<TUser>;
   cacheFactory?: CreateEntityClientOptions<any>["cacheFactory"];
   contextResolver?: StrategyContextResolver<any, any>;
+  defaultStrategyId?: EncryptionAlgorithmId;
   models?: TModels;
   services?: {
     [TKey in keyof TServices]: E2eeBackendServiceDefinition<TServices[TKey]>;
@@ -165,6 +170,7 @@ export class E2eeBackend<
   private readonly listeners = new Set<(snapshot: E2eeBackendSnapshot) => void>();
   private readonly modelClients = new Map<string, unknown>();
   private readonly modelDefinitions = new Map<string, ClientModelDefinition<any, any>>();
+  private readonly defaultStrategyId: EncryptionAlgorithmId;
   private readonly options: E2eeBackendOptions<TModels, TUser, TServices>;
   private readonly serviceDefinitions = new Map<string, E2eeBackendServiceDefinition<any>>();
   private readonly serviceInstances = new Map<string, unknown>();
@@ -192,6 +198,7 @@ export class E2eeBackend<
     });
     this.stateStore = stateStore;
     this.storageStrategy = storageStrategy;
+    this.defaultStrategyId = options.defaultStrategyId ?? E2eeEncryptionStrategy.Aes256Gcm;
     this.strategies = options.strategies ?? createStrategyRegistry(createAes256GcmStrategy());
     this.contextResolver = {
       resolve: async (args) => {
@@ -225,7 +232,7 @@ export class E2eeBackend<
     this.restoreState();
 
     for (const [key, definition] of Object.entries(options.models ?? {})) {
-      this.modelDefinitions.set(key, definition);
+      this.modelDefinitions.set(key, this.withDefaultStrategy(definition));
     }
 
     for (const [key, definition] of Object.entries(options.services ?? {})) {
@@ -372,7 +379,7 @@ export class E2eeBackend<
     key: TKey,
     definition: TDefinition,
   ): E2eeBackend<TModels & Record<TKey, TDefinition>, TUser, TServices> {
-    this.modelDefinitions.set(key, definition);
+    this.modelDefinitions.set(key, this.withDefaultStrategy(definition));
     this.modelClients.delete(key);
     return this as unknown as E2eeBackend<
       TModels & Record<TKey, TDefinition>,
@@ -515,6 +522,18 @@ export class E2eeBackend<
     } finally {
       this.hasRestoredState = true;
     }
+  }
+
+  private withDefaultStrategy<TDefinition extends ClientModelDefinition<any, any>>(
+    definition: TDefinition,
+  ): TDefinition {
+    return {
+      ...definition,
+      schema: {
+        ...definition.schema,
+        defaultStrategyId: this.defaultStrategyId,
+      },
+    } as TDefinition;
   }
 }
 

@@ -29,12 +29,15 @@ Use `field.json(...)` for structured values whenever possible so invalid data is
 Call `.encrypted()` on any field that should be stored as ciphertext on the remote side.
 
 ```ts
+import { E2eeEncryptionStrategy } from "e2ee-client-backend";
+
 const settingsModel = defineEntityModel({
-  defaultStrategyId: "aes-256-gcm",
   fields: {
     id: field.string(),
     displayName: field.string(),
-    preferences: field.json(preferencesSchema).encrypted(),
+    preferences: field
+      .json(preferencesSchema)
+      .encrypted({ strategyId: E2eeEncryptionStrategy.Aes256Gcm }),
   },
   idField: "id",
   name: "settings",
@@ -45,7 +48,9 @@ Important behavior:
 
 - unencrypted fields are passed through directly
 - encrypted fields are serialized before encryption and parsed after decryption
-- the repository chooses the field strategy from `strategyId` or the model default strategy
+- the repository chooses the field strategy from `strategyId` or the schema default strategy
+
+When you use `E2eeBackend`, the backend can inject that schema default once for all registered models through `createE2eeBackend({ defaultStrategyId: ... })`.
 
 ## Remote Field Names
 

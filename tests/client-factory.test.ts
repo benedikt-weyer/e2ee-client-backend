@@ -7,7 +7,10 @@ import {
 } from "../src/client-factory";
 import { createAes256GcmStrategy } from "../src/crypto/aes-gcm-strategy";
 import { createStrategyRegistry } from "../src/crypto/strategy-registry";
-import type { EncryptedFieldValue } from "../src/crypto/types";
+import {
+  E2eeEncryptionStrategy,
+  type EncryptedFieldValue,
+} from "../src/crypto/types";
 import type { StrategyContextResolver } from "../src/repositories/entity-repository";
 import { defineEntityModel, field } from "../src/schema-builder";
 
@@ -53,7 +56,7 @@ function createResolver<TEntity, TRemote>(): StrategyContextResolver<TEntity, TR
 describe("entity client factory", () => {
   it("returns repositories by default for model definitions", async () => {
     const dashboardModel = defineEntityModel({
-      defaultStrategyId: "aes-256-gcm",
+      defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
       fields: {
         config: field
           .json(
@@ -107,7 +110,7 @@ describe("entity client factory", () => {
 
   it("supports custom services built from model definitions", async () => {
     const dashboardModel = defineEntityModel({
-      defaultStrategyId: "aes-256-gcm",
+      defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
       fields: {
         config: field
           .json(

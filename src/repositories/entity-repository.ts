@@ -2,6 +2,7 @@ import type { CrudAdapter } from "../adapters/contracts";
 import type { CacheStore } from "../cache/loki-cache";
 import { StrategyRegistry } from "../crypto/strategy-registry";
 import {
+  type EncryptionAlgorithmId,
   type EncryptedFieldValue,
   isEncryptedFieldValue,
 } from "../crypto/types";
@@ -83,14 +84,14 @@ export interface FieldPolicy<TEntity, TRemote> {
   entityPath: string;
   remotePath?: string;
   serialize?: (value: unknown, entity: TEntity) => unknown;
-  strategyId?: string;
+  strategyId?: EncryptionAlgorithmId;
 }
 
 export interface EntitySchema<TEntity, TRemote, TId = string> {
   cacheCollection?: string;
   createEntity(remote: TRemote): TEntity;
   createRemote(entity: TEntity): TRemote;
-  defaultStrategyId?: string;
+  defaultStrategyId?: EncryptionAlgorithmId;
   fields: FieldPolicy<TEntity, TRemote>[];
   idPath?: string;
   name: string;

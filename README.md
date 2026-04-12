@@ -42,7 +42,26 @@ pnpm typecheck
 pnpm test
 pnpm next-version
 pnpm publish:npm -- --dry-run
+python -m pip install -r docs/requirements.txt
+mkdocs serve
+mkdocs build --strict
 ```
+
+## Documentation
+
+The repository includes a single MkDocs site with two audiences separated into different guides:
+
+- `docs/user-guide.md` for package consumers
+- `docs/developer-guide.md` for contributors and maintainers
+
+Local docs workflow:
+
+```bash
+python -m pip install -r docs/requirements.txt
+mkdocs serve
+```
+
+GitHub Pages deployment is handled by `.github/workflows/docs-pages.yml`.
 
 ## Publishing
 

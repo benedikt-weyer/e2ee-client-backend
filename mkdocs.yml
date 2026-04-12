@@ -1,0 +1,38 @@
+site_name: e2ee-client-backend
+site_description: Documentation for the e2ee-client-backend npm package
+site_url: https://benedikt-weyer.github.io/e2ee-client-backend/
+repo_url: https://github.com/benedikt-weyer/e2ee-client-backend
+repo_name: benedikt-weyer/e2ee-client-backend
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: blue
+      accent: blue
+
+nav:
+  - Overview: index.md
+  - User Guide: user-guide.md
+  - Developer Guide: developer-guide.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences

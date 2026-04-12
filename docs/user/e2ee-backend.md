@@ -235,6 +235,128 @@ await graphqlNotes.create({
 });
 ```
 
+### Minimal GraphQL Example With Apollo Client
+
+```ts
+import {
+  gql,
+  type ApolloClient,
+  type NormalizedCacheObject,
+} from "@apollo/client";
+
+const CREATE_NOTE = gql`
+  mutation CreateNote($input: NoteInput!) {
+    createNote(input: $input) {
+      id
+      title
+      content
+    }
+  }
+`;
+
+const DELETE_NOTE = gql`
+  mutation DeleteNote($id: ID!) {
+    deleteNote(id: $id)
+  }
+`;
+
+const GET_NOTE = gql`
+  query Note($id: ID!) {
+    note(id: $id) {
+      id
+      title
+      content
+    }
+  }
+`;
+
+const LIST_NOTES = gql`
+  query Notes {
+    notes {
+      id
+      title
+      content
+    }
+  }
+`;
+
+const UPDATE_NOTE = gql`
+  mutation UpdateNote($id: ID!, $input: NoteInput!) {
+    updateNote(id: $id, input: $input) {
+      id
+      title
+      content
+    }
+  }
+`;
+
+function createApolloGraphqlTransport(
+  client: ApolloClient<NormalizedCacheObject>,
+) {
+  return createGraphqlTransport(async ({ document, kind, variables }) => {
+    if (kind === "mutation") {
+      const { data } = await client.mutate({
+        mutation: document,
+        variables,
+      });
+      return data;
+    }
+
+    const { data } = await client.query({
+      fetchPolicy: "network-only",
+      query: document,
+      variables,
+    });
+    return data;
+  });
+}
+
+declare const apolloClient: ApolloClient<NormalizedCacheObject>;
+
+const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
+  createApolloGraphqlTransport(apolloClient),
+  {
+    create: {
+      buildVariables: (input) => ({ input }),
+      document: CREATE_NOTE,
+      select: (result) => (result as { createNote: NoteRemoteRecord }).createNote,
+    },
+    delete: {
+      buildVariables: (id) => ({ id }),
+      document: DELETE_NOTE,
+    },
+    getById: {
+      buildVariables: (id) => ({ id }),
+      document: GET_NOTE,
+      select: (result) => (result as { note: NoteRemoteRecord | null }).note,
+    },
+    list: {
+      document: LIST_NOTES,
+      select: (result) => (result as { notes: NoteRemoteRecord[] }).notes,
+    },
+    update: {
+      buildVariables: (id, input) => ({ id, input }),
+      document: UPDATE_NOTE,
+      select: (result) => (result as { updateNote: NoteRemoteRecord }).updateNote,
+    },
+  },
+);
+
+const apolloBackend = createE2eeBackend({
+  authAdapter,
+  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
+  models: {
+    notes: defineClientModel({
+      adapter: apolloAdapter,
+      schema: noteModel,
+    }),
+  },
+  storage: E2eeBackendStorageStrategy.LocalStorage,
+  storageKey: "my-app.e2ee.v1",
+  strategies: createStrategyRegistry(createAes256GcmStrategy()),
+});
+```
+
 ### Minimal REST Example
 
 ```ts

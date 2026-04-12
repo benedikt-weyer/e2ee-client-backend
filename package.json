@@ -1,10 +1,18 @@
 {
-  "name": "e2ee-client-backend",
-  "version": "0.1.0",
+  "name": "@benedikt.weyer/e2ee-client-backend",
+  "version": "0.1.1",
   "description": "Browser-first E2EE client backend with repository, adapter, cache, and crypto strategy abstractions.",
+  "homepage": "https://github.com/benedikt-weyer/e2ee-client-backend#readme",
+  "bugs": {
+    "url": "https://github.com/benedikt-weyer/e2ee-client-backend/issues"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/benedikt-weyer/e2ee-client-backend.git"
+  },
   "files": [
     "dist"
   ],
@@ -17,6 +25,10 @@
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -24,7 +36,9 @@
   "scripts": {
     "build": "tsup",
     "clean": "rm -rf dist",
+    "next-version": "bash ./scripts/next-version.sh",
     "prepare": "npm run build",
+    "publish:npm": "bash ./scripts/publish-npm.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

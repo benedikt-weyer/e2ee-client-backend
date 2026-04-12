@@ -40,4 +40,30 @@ pnpm install
 pnpm build
 pnpm typecheck
 pnpm test
+pnpm next-version
+pnpm publish:npm -- --dry-run
 ```
+
+## Publishing
+
+Local publish flow:
+
+```bash
+pnpm publish:npm
+```
+
+The publish script in `scripts/publish-npm.sh` always runs build, type-check, and test before calling `npm publish` against the public npm registry. Pass through extra `npm publish` flags after `--`, for example `pnpm publish:npm -- --dry-run`.
+
+## GitHub release workflow
+
+The repository includes a manual workflow at `.github/workflows/release-npm.yml`.
+
+- Trigger it with `workflow_dispatch` from the GitHub Actions UI.
+- Choose whether the next release should bump `patch`, `minor`, or `major`.
+- The workflow calculates the next version from the latest semantic git tag.
+- If no semantic tag exists yet, it falls back to the current `package.json` version and increments from there.
+- It updates `package.json`, creates a release commit, creates a `vX.Y.Z` git tag, publishes to npmjs, and then pushes the commit and tag back to GitHub.
+
+Required repository secret:
+
+- `NPM_TOKEN`: npm access token with permission to publish this package on npmjs.

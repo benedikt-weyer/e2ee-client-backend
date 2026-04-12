@@ -128,8 +128,10 @@ To enable Trusted Publishing on npmjs:
 5. Save the trusted publisher configuration in npm.
 6. Trigger the `Release npm Package` workflow from GitHub Actions.
 
+If GitHub Actions fails with `E404 Not Found - PUT https://registry.npmjs.org/e2ee-client-backend` for an existing package, that usually means the npm package does not yet trust this repository and workflow as a Trusted Publisher, or that the publish credentials do not own the package.
+
 If the package does not exist on npm yet and npm does not let you configure Trusted Publishing before the first release, publish the first version manually with `npm login` or `NPM_TOKEN`, then switch the GitHub workflow over to Trusted Publishing for all later releases.
 
 Optional fallback secret:
 
-- `NPM_TOKEN`: only needed if you want token-based publishing as a fallback or for non-OIDC environments.
+- `NPM_TOKEN`: optional fallback for token-based publishing. The release workflow now passes it through automatically if the secret is configured.

@@ -39,4 +39,22 @@ if [[ "$#" -gt 0 ]]; then
   publish_args+=("$@")
 fi
 
-npm publish "${publish_args[@]}"
+if ! npm publish "${publish_args[@]}"; then
+  cat >&2 <<'EOF'
+
+npm publish failed.
+
+If GitHub Actions returns E404 for an existing package, the usual causes are:
+- npm Trusted Publishing is not configured for this repository and workflow on the package
+- the package is owned by a different npm account or org than the credentials used here
+- no NPM_TOKEN fallback secret is configured for token-based publishing
+
+For this repository, check the npm package settings for `e2ee-client-backend` and verify:
+- trusted publisher repository owner: `benedikt-weyer`
+- trusted publisher repository name: `e2ee-client-backend`
+- trusted publisher workflow file: `release-npm.yml`
+
+If Trusted Publishing is not available yet, configure the `NPM_TOKEN` GitHub secret as a fallback.
+EOF
+  exit 1
+fi

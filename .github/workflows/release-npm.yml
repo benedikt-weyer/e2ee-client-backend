@@ -72,6 +72,18 @@ jobs:
           NPM_PUBLISH_PREFER_TOKEN: "false"
         run: ./scripts/publish-npm.sh
 
+      - name: Verify NPM_TOKEN fallback identity
+        if: steps.publish_oidc.outcome == 'failure' && env.HAS_NPM_TOKEN == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          token_user="$(npm whoami --registry=https://registry.npmjs.org/)"
+          echo "NPM_TOKEN resolves to npm user: $token_user"
+          if [[ "$token_user" != "benedikt.weyer" ]]; then
+            echo "Expected NPM_TOKEN to belong to benedikt.weyer, but got $token_user" >&2
+            exit 1
+          fi
+
       - name: Publish to npmjs with NPM_TOKEN fallback
         id: publish_token
         if: steps.publish_oidc.outcome == 'failure' && env.HAS_NPM_TOKEN == 'true'

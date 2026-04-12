@@ -26,6 +26,7 @@ nav:
       - Getting Started: user/getting-started.md
       - Modeling Entities: user/modeling-entities.md
       - Adapters and Transports: user/adapters-and-transports.md
+      - External Datasources: user/external-datasources.md
       - Crypto, Auth, and Compatibility: user/crypto-auth-and-compat.md
       - Advanced Usage: user/advanced-usage.md
   - Developer Guide:

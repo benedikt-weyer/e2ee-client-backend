@@ -56,6 +56,7 @@ Start here depending on what you need:
 - [Getting Started](user/getting-started.md) for the shortest path from install to a working encrypted client.
 - [Modeling Entities](user/modeling-entities.md) for the Prisma-like model builder, encrypted field configuration, and validation behavior.
 - [Adapters and Transports](user/adapters-and-transports.md) for GraphQL and REST integration patterns.
+- [External Datasources](user/external-datasources.md) for live third-party API access built on decrypted integration config.
 - [Crypto, Auth, and Compatibility](user/crypto-auth-and-compat.md) for strategy selection, password-derived auth flows, and legacy blob migration.
 - [Advanced Usage](user/advanced-usage.md) for direct repository wiring and lower-level schema control.
 - [Architecture](developer/architecture.md) for package internals and layer boundaries.

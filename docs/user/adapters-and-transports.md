@@ -53,3 +53,9 @@ That separation matters because:
 - cache policy stays consistent across GraphQL and REST
 - encryption stays in one layer
 - transport code remains easier to test in isolation
+
+## External Datasource Note
+
+The transport helpers are also useful for third-party datasource providers.
+
+If you want to call an external API with already-decrypted integration config, do not force it through `createEntityClient(...)`. Build an `ExternalE2eeApiProvider` and wrap it with `createExternalE2eeApiClient(...)` instead. See [External Datasources](external-datasources.md) for the minimal pattern.

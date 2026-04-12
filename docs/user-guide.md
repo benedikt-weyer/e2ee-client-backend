@@ -7,8 +7,9 @@ The user documentation is now split into focused subpages so the package can be 
 1. [Getting Started](user/getting-started.md) for installation, runtime expectations, and the shortest working example.
 2. [Modeling Entities](user/modeling-entities.md) for field definitions, encrypted field flags, validation, and custom services.
 3. [Adapters and Transports](user/adapters-and-transports.md) for protocol integration over GraphQL or REST.
-4. [Crypto, Auth, and Compatibility](user/crypto-auth-and-compat.md) for crypto strategy selection, auth helpers, and legacy blob migration.
-5. [Advanced Usage](user/advanced-usage.md) if you need to bypass the top-level client factory.
+4. [External Datasources](user/external-datasources.md) for provider modules that call third-party APIs such as task systems.
+5. [Crypto, Auth, and Compatibility](user/crypto-auth-and-compat.md) for crypto strategy selection, auth helpers, and legacy blob migration.
+6. [Advanced Usage](user/advanced-usage.md) if you need to bypass the top-level client factory.
 
 ## Recommended Default
 
@@ -22,6 +23,8 @@ That path gives you:
 - an easy upgrade path to custom model-specific service surfaces
 
 Reach for direct `createEntityRepository(...)` wiring only if you need lower-level control than the factory API allows.
+
+If your app also talks to third-party APIs with decrypted integration config, use `createExternalE2eeApiClient(...)` rather than the repository factory. That pattern is documented in [External Datasources](user/external-datasources.md).
 
 That path is appropriate when:
 

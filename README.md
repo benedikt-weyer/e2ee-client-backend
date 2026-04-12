@@ -105,7 +105,7 @@ The repository includes a manual workflow at `.github/workflows/release-npm.yml`
 - Choose whether the next release should bump `patch`, `minor`, or `major`.
 - The workflow calculates the next version from the latest semantic git tag.
 - If no semantic tag exists yet, it falls back to the current `package.json` version and increments from there.
-- It updates `package.json`, creates a release commit, creates a `vX.Y.Z` git tag, publishes to npmjs, and then pushes the commit and tag back to GitHub.
+- It updates `package.json` in the workflow workspace, publishes to npmjs, and only after a successful publish creates the release commit, creates the `vX.Y.Z` git tag, and pushes both back to GitHub.
 
 ## Trusted Publishing
 

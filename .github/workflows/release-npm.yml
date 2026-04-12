@@ -61,6 +61,11 @@ jobs:
       - name: Update package version
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
 
+      - name: Publish to npmjs
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: ./scripts/publish-npm.sh
+
       - name: Commit release version
         run: |
           git add package.json
@@ -68,11 +73,6 @@ jobs:
 
       - name: Create git tag
         run: git tag "${{ steps.version.outputs.tag }}"
-
-      - name: Publish to npmjs
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: ./scripts/publish-npm.sh
 
       - name: Push release commit and tag
         run: |

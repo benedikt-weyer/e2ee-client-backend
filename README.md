@@ -8,142 +8,14 @@ The intended entrypoint is `E2eeBackend` plus the model builder.
 
 If you want one stateful object to own password auth, browser storage, context resolution, model registration, and lazy client creation, use `E2eeBackend`. That higher-level API is documented in `docs/user/e2ee-backend.md`.
 
-```ts
-import {
-	type CrudAdapter,
-	E2eeEncryptionStrategy,
-	E2eeBackendStorageStrategy,
-	type EncryptedFieldValue,
-	type PasswordAuthAdapter,
-	createAes256GcmStrategy,
-	createE2eeBackend,
-	createStrategyRegistry,
-	defineClientModel,
-	defineEntityModel,
-	field,
-} from "e2ee-client-backend";
+Minimal GraphQL and REST `E2eeBackend` examples are documented in `docs/user/e2ee-backend.md` and `docs/user/getting-started.md`.
 
-type SessionUser = {
-	email: string;
-	id: string;
-};
+Those examples show the full shape of:
 
-type DashboardRemoteRecord = {
-	id: string;
-	name: string;
-	secretFilterEnvelope: EncryptedFieldValue | null;
-};
-
-const authAdapter: PasswordAuthAdapter<SessionUser> = {
-	async getKdfSalt(email) {
-		const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
-		const data = await response.json();
-		return data.kdfSaltBase64;
-	},
-	async login(email, authKeyMaterialHex) {
-		const response = await fetch("/api/auth/login", {
-			body: JSON.stringify({ authKeyMaterialHex, email }),
-			headers: { "content-type": "application/json" },
-			method: "POST",
-		});
-		return response.json();
-	},
-	async logout() {
-		await fetch("/api/auth/logout", { method: "POST" });
-		return true;
-	},
-	async refresh() {
-		const response = await fetch("/api/auth/refresh", { method: "POST" });
-		return response.json();
-	},
-	async registerBegin(email) {
-		const response = await fetch("/api/auth/register-begin", {
-			body: JSON.stringify({ email }),
-			headers: { "content-type": "application/json" },
-			method: "POST",
-		});
-		return response.json();
-	},
-	async registerComplete(email, authKeyMaterialHex) {
-		const response = await fetch("/api/auth/register-complete", {
-			body: JSON.stringify({ authKeyMaterialHex, email }),
-			headers: { "content-type": "application/json" },
-			method: "POST",
-		});
-		return response.json();
-	},
-	};
-
-const adapter: CrudAdapter<DashboardRemoteRecord, string> = {
-	async create(input) {
-		const response = await fetch("/api/dashboards", {
-			body: JSON.stringify(input),
-			headers: { "content-type": "application/json" },
-			method: "POST",
-		});
-		return response.json();
-	},
-	async delete(id) {
-		await fetch(`/api/dashboards/${id}`, { method: "DELETE" });
-	},
-	async getById(id) {
-		const response = await fetch(`/api/dashboards/${id}`);
-		if (response.status === 404) {
-			return null;
-		}
-		return response.json();
-	},
-	async list() {
-		const response = await fetch("/api/dashboards");
-		return response.json();
-	},
-	async update(id, input) {
-		const response = await fetch(`/api/dashboards/${id}`, {
-			body: JSON.stringify(input),
-			headers: { "content-type": "application/json" },
-			method: "PUT",
-		});
-		return response.json();
-	},
-	};
-
-const dashboardModel = defineEntityModel({
-	cacheCollection: "dashboards",
-	fields: {
-		id: field.string(),
-		name: field.string(),
-		secretFilter: field.string().nullable().encrypted(),
-	},
-	idField: "id",
-	name: "dashboard",
-});
-
-const backend = createE2eeBackend({
-	authAdapter,
-	defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
-	models: {
-		dashboards: defineClientModel({
-			adapter,
-			schema: dashboardModel,
-		}),
-	},
-	storage: E2eeBackendStorageStrategy.LocalStorage,
-	storageKey: "dashboard.e2ee.v1",
-	strategies: createStrategyRegistry(createAes256GcmStrategy()),
-});
-
-await backend.loginWithPassword("ops@example.com", "top-secret-password");
-
-const dashboards = backend.getClient("dashboards");
-
-await dashboards.create({
-	id: crypto.randomUUID(),
-	name: "Main dashboard",
-	secretFilter: null,
-});
-```
-
-`authAdapter` and `adapter` are app-provided integrations. They are the parts that talk to your real auth endpoints and CRUD API.
+- a `PasswordAuthAdapter` that talks to your auth endpoints
+- a `GraphqlCrudAdapter` built on `createGraphqlTransport(...)`
+- a `RestCrudAdapter` built on `createFetchRestTransport(...)`
+- `createE2eeBackend(...)` using the same model with either protocol
 
 Use this path unless you explicitly need lower-level repository wiring. If you only want repository construction without the stateful orchestration layer, use `createEntityClient(...)` directly instead.
 

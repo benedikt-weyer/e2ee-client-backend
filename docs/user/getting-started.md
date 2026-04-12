@@ -47,17 +47,20 @@ That gives you one object that can own:
 
 Use `createEntityClient(...)` directly only when you want repository construction without the stateful orchestration layer.
 
-## Minimal E2eeBackend Example
+## Minimal E2eeBackend Examples
 
 ```ts
 import {
-  type CrudAdapter,
   E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
   type PasswordAuthAdapter,
+  GraphqlCrudAdapter,
+  RestCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
+  createFetchRestTransport,
+  createGraphqlTransport,
   createStrategyRegistry,
   defineClientModel,
   defineEntityModel,
@@ -70,7 +73,7 @@ type SessionUser = {
 };
 
 type NoteRemoteRecord = {
-  contentEnvelope: EncryptedFieldValue;
+  content: EncryptedFieldValue;
   id: string;
   title: string;
 };
@@ -115,39 +118,6 @@ const authAdapter: PasswordAuthAdapter<SessionUser> = {
   },
 };
 
-const adapter: CrudAdapter<NoteRemoteRecord, string> = {
-  async create(input) {
-    const response = await fetch("/api/notes", {
-      body: JSON.stringify(input),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async delete(id) {
-    await fetch(`/api/notes/${id}`, { method: "DELETE" });
-  },
-  async getById(id) {
-    const response = await fetch(`/api/notes/${id}`);
-    if (response.status === 404) {
-      return null;
-    }
-    return response.json();
-  },
-  async list() {
-    const response = await fetch("/api/notes");
-    return response.json();
-  },
-  async update(id, input) {
-    const response = await fetch(`/api/notes/${id}`, {
-      body: JSON.stringify(input),
-      headers: { "content-type": "application/json" },
-      method: "PUT",
-    });
-    return response.json();
-  },
-};
-
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
   fields: {
@@ -158,13 +128,66 @@ const noteModel = defineEntityModel({
   idField: "id",
   name: "note",
 });
+```
 
-const backend = createE2eeBackend({
+Pick the adapter style that matches your backend protocol.
+
+### GraphQL
+
+```ts
+const graphqlTransport = createGraphqlTransport(async ({ document, variables }) => {
+  const response = await fetch("/graphql", {
+    body: JSON.stringify({ query: String(document), variables }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  const payload = await response.json() as {
+    data?: unknown;
+    errors?: Array<{ message: string }>;
+  };
+
+  if (payload.errors?.length) {
+    throw new Error(payload.errors[0].message);
+  }
+
+  return payload.data;
+});
+
+const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
+  graphqlTransport,
+  {
+    create: {
+      buildVariables: (input) => ({ input }),
+      document: `mutation CreateNote($input: NoteInput!) { createNote(input: $input) { id title content } }`,
+      select: (result) => (result as { createNote: NoteRemoteRecord }).createNote,
+    },
+    delete: {
+      buildVariables: (id) => ({ id }),
+      document: `mutation DeleteNote($id: ID!) { deleteNote(id: $id) }`,
+    },
+    getById: {
+      buildVariables: (id) => ({ id }),
+      document: `query Note($id: ID!) { note(id: $id) { id title content } }`,
+      select: (result) => (result as { note: NoteRemoteRecord | null }).note,
+    },
+    list: {
+      document: `query Notes { notes { id title content } }`,
+      select: (result) => (result as { notes: NoteRemoteRecord[] }).notes,
+    },
+    update: {
+      buildVariables: (id, input) => ({ id, input }),
+      document: `mutation UpdateNote($id: ID!, $input: NoteInput!) { updateNote(id: $id, input: $input) { id title content } }`,
+      select: (result) => (result as { updateNote: NoteRemoteRecord }).updateNote,
+    },
+  },
+);
+
+const graphqlBackend = createE2eeBackend({
   authAdapter,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
-      adapter,
+      adapter: graphqlAdapter,
       schema: noteModel,
     }),
   },
@@ -173,11 +196,54 @@ const backend = createE2eeBackend({
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
-await backend.loginWithPassword("ops@example.com", "top-secret-password");
+await graphqlBackend.loginWithPassword("ops@example.com", "top-secret-password");
 
-const notes = backend.getClient("notes");
+const graphqlNotes = graphqlBackend.getClient("notes");
 
-await notes.create({
+await graphqlNotes.create({
+  content: "Encrypted text",
+  id: crypto.randomUUID(),
+  title: "First note",
+});
+```
+
+### REST
+
+```ts
+const restTransport = createFetchRestTransport({
+  baseUrl: "/api",
+  defaultHeaders: {
+    accept: "application/json",
+  },
+});
+
+const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
+  create: { path: "/notes" },
+  delete: { path: (id) => `/notes/${id}` },
+  getById: { path: (id) => `/notes/${id}` },
+  list: { path: "/notes" },
+  update: { path: (id) => `/notes/${id}` },
+});
+
+const restBackend = createE2eeBackend({
+  authAdapter,
+  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
+  models: {
+    notes: defineClientModel({
+      adapter: restAdapter,
+      schema: noteModel,
+    }),
+  },
+  storage: E2eeBackendStorageStrategy.LocalStorage,
+  storageKey: "my-app.e2ee.v1",
+  strategies: createStrategyRegistry(createAes256GcmStrategy()),
+});
+
+await restBackend.loginWithPassword("ops@example.com", "top-secret-password");
+
+const restNotes = restBackend.getClient("notes");
+
+await restNotes.create({
   content: "Encrypted text",
   id: crypto.randomUUID(),
   title: "First note",
@@ -186,7 +252,7 @@ await notes.create({
 
 This is the intended browser-app entrypoint. You do not provide a manual `contextResolver`; the backend manages the active encryption key and injects it automatically for encrypted repository operations.
 
-The two adapters in this example are application-owned integration points: `authAdapter` wires password auth to your backend, and `adapter` wires one model's remote CRUD operations to your API.
+The adapters in these examples are application-owned integration points: `authAdapter` wires password auth to your backend, and the GraphQL or REST adapter wires one model's remote CRUD operations to your API.
 
 ## What You Get By Default
 

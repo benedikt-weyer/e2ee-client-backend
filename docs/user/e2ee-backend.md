@@ -39,17 +39,20 @@ Available options:
 
 The package default is local storage.
 
-## Minimal Example
+## Minimal Examples
 
 ```ts
 import {
-  type CrudAdapter,
   E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
   type PasswordAuthAdapter,
+  GraphqlCrudAdapter,
+  RestCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
+  createFetchRestTransport,
+  createGraphqlTransport,
   createStrategyRegistry,
   defineClientModel,
   defineEntityModel,
@@ -62,7 +65,7 @@ type SessionUser = {
 };
 
 type NoteRemoteRecord = {
-  contentEnvelope: EncryptedFieldValue;
+  content: EncryptedFieldValue;
   id: string;
   title: string;
 };
@@ -107,39 +110,6 @@ const authAdapter: PasswordAuthAdapter<SessionUser> = {
   },
 };
 
-const adapter: CrudAdapter<NoteRemoteRecord, string> = {
-  async create(input) {
-    const response = await fetch("/api/notes", {
-      body: JSON.stringify(input),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    return response.json();
-  },
-  async delete(id) {
-    await fetch(`/api/notes/${id}`, { method: "DELETE" });
-  },
-  async getById(id) {
-    const response = await fetch(`/api/notes/${id}`);
-    if (response.status === 404) {
-      return null;
-    }
-    return response.json();
-  },
-  async list() {
-    const response = await fetch("/api/notes");
-    return response.json();
-  },
-  async update(id, input) {
-    const response = await fetch(`/api/notes/${id}`, {
-      body: JSON.stringify(input),
-      headers: { "content-type": "application/json" },
-      method: "PUT",
-    });
-    return response.json();
-  },
-};
-
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
   fields: {
@@ -150,13 +120,102 @@ const noteModel = defineEntityModel({
   idField: "id",
   name: "note",
 });
+```
 
-const backend = createE2eeBackend({
+The auth adapter is the same in both cases. The CRUD adapter changes depending on whether your backend is GraphQL-based or route-based.
+
+### Minimal GraphQL Example
+
+```ts
+const graphqlTransport = createGraphqlTransport(async ({ document, kind, variables }) => {
+  const response = await fetch("/graphql", {
+    body: JSON.stringify({ query: String(document), variables }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  const payload = await response.json() as {
+    data?: unknown;
+    errors?: Array<{ message: string }>;
+  };
+
+  if (payload.errors?.length) {
+    throw new Error(payload.errors[0].message);
+  }
+
+  return payload.data;
+});
+
+const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
+  graphqlTransport,
+  {
+    create: {
+      buildVariables: (input) => ({ input }),
+      document: `
+        mutation CreateNote($input: NoteInput!) {
+          createNote(input: $input) {
+            id
+            title
+            content
+          }
+        }
+      `,
+      select: (result) => (result as { createNote: NoteRemoteRecord }).createNote,
+    },
+    delete: {
+      buildVariables: (id) => ({ id }),
+      document: `
+        mutation DeleteNote($id: ID!) {
+          deleteNote(id: $id)
+        }
+      `,
+    },
+    getById: {
+      buildVariables: (id) => ({ id }),
+      document: `
+        query Note($id: ID!) {
+          note(id: $id) {
+            id
+            title
+            content
+          }
+        }
+      `,
+      select: (result) => (result as { note: NoteRemoteRecord | null }).note,
+    },
+    list: {
+      document: `
+        query Notes {
+          notes {
+            id
+            title
+            content
+          }
+        }
+      `,
+      select: (result) => (result as { notes: NoteRemoteRecord[] }).notes,
+    },
+    update: {
+      buildVariables: (id, input) => ({ id, input }),
+      document: `
+        mutation UpdateNote($id: ID!, $input: NoteInput!) {
+          updateNote(id: $id, input: $input) {
+            id
+            title
+            content
+          }
+        }
+      `,
+      select: (result) => (result as { updateNote: NoteRemoteRecord }).updateNote,
+    },
+  },
+);
+
+const graphqlBackend = createE2eeBackend({
   authAdapter,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
-      adapter,
+      adapter: graphqlAdapter,
       schema: noteModel,
     }),
   },
@@ -165,11 +224,54 @@ const backend = createE2eeBackend({
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
-await backend.loginWithPassword("ops@example.com", "top-secret-password");
+await graphqlBackend.loginWithPassword("ops@example.com", "top-secret-password");
 
-const notes = backend.getClient("notes");
+const graphqlNotes = graphqlBackend.getClient("notes");
 
-await notes.create({
+await graphqlNotes.create({
+  content: "Encrypted text",
+  id: crypto.randomUUID(),
+  title: "First note",
+});
+```
+
+### Minimal REST Example
+
+```ts
+const restTransport = createFetchRestTransport({
+  baseUrl: "/api",
+  defaultHeaders: {
+    accept: "application/json",
+  },
+});
+
+const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
+  create: { path: "/notes" },
+  delete: { path: (id) => `/notes/${id}` },
+  getById: { path: (id) => `/notes/${id}` },
+  list: { path: "/notes" },
+  update: { path: (id) => `/notes/${id}` },
+});
+
+const restBackend = createE2eeBackend({
+  authAdapter,
+  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
+  models: {
+    notes: defineClientModel({
+      adapter: restAdapter,
+      schema: noteModel,
+    }),
+  },
+  storage: E2eeBackendStorageStrategy.LocalStorage,
+  storageKey: "my-app.e2ee.v1",
+  strategies: createStrategyRegistry(createAes256GcmStrategy()),
+});
+
+await restBackend.loginWithPassword("ops@example.com", "top-secret-password");
+
+const restNotes = restBackend.getClient("notes");
+
+await restNotes.create({
   content: "Encrypted text",
   id: crypto.randomUUID(),
   title: "First note",
@@ -178,7 +280,7 @@ await notes.create({
 
 The important point is that you never provide a manual `contextResolver`. The backend stores the managed encryption key and injects it automatically when repository operations need to encrypt or decrypt fields.
 
-In other words, `authAdapter` and `adapter` are application code. `authAdapter` connects password auth to your backend, and `adapter` connects CRUD operations for one model to your API.
+In both examples, `authAdapter` and the CRUD adapter are application code. `authAdapter` connects password auth to your backend, and the GraphQL or REST adapter connects one model's remote CRUD operations to your API.
 
 `defaultStrategyId` applies to every registered model in that backend unless a field or lower-level schema explicitly overrides the strategy.
 

@@ -29,16 +29,31 @@ Most integrations follow this order:
 1. Define a model with the field builder API.
 2. Mark the fields that should be end-to-end encrypted.
 3. Build CRUD adapters over GraphQL or REST.
-4. Create or choose a crypto strategy.
-5. Create one entity client from a `models` object.
-6. Use the generated repositories or custom per-model services from application code.
+4. Create one `E2eeBackend` instance for the app.
+5. Let the backend manage auth, secret persistence, and context injection.
+6. Fetch generated model clients from that backend in application code.
 
-## Minimal Factory Example
+## Recommended Default
+
+For most browser applications, start with `E2eeBackend`.
+
+That gives you one object that can own:
+
+- password-based auth flows
+- browser storage of the managed secret state
+- automatic encryption key injection through the internal `contextResolver`
+- lazy model client creation
+- optional app-level service registration
+
+Use `createEntityClient(...)` directly only when you want repository construction without the stateful orchestration layer.
+
+## Minimal E2eeBackend Example
 
 ```ts
 import {
+  E2eeBackendStorageStrategy,
   createAes256GcmStrategy,
-  createEntityClient,
+  createE2eeBackend,
   createStrategyRegistry,
   defineClientModel,
   defineEntityModel,
@@ -57,37 +72,42 @@ const noteModel = defineEntityModel({
   name: "note",
 });
 
-const client = createEntityClient({
-  contextResolver: {
-    async resolve() {
-      return {
-        key: crypto.getRandomValues(new Uint8Array(32)),
-      };
-    },
-  },
+const backend = createE2eeBackend({
+  authAdapter,
   models: {
     notes: defineClientModel({
       adapter,
       schema: noteModel,
     }),
   },
+  storage: E2eeBackendStorageStrategy.LocalStorage,
+  storageKey: "my-app.e2ee.v1",
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
-await client.notes.create({
+await backend.loginWithPassword("ops@example.com", "top-secret-password");
+
+const notes = backend.getClient("notes");
+
+await notes.create({
   content: "Encrypted text",
   id: crypto.randomUUID(),
   title: "First note",
 });
 ```
 
+This is the intended browser-app entrypoint. You do not provide a manual `contextResolver`; the backend manages the active encryption key and injects it automatically for encrypted repository operations.
+
 ## What You Get By Default
 
-The factory-based path gives you a few things automatically:
+The `E2eeBackend` path gives you a few things automatically:
 
 - encrypted field handling in one place instead of scattering crypto logic through the app
 - runtime validation from the field builder definitions
+- configurable secret persistence through local storage, session storage, memory, or a custom store
 - a LokiJS-backed plaintext cache unless you override cache behavior
-- a clean path to expose either the raw repository or a custom service per model
+- a clean path to expose either the raw repository client or higher-level services from one root object
 
-Continue to [Modeling Entities](modeling-entities.md) for field mapping and validation details.
+If you want the full orchestration API surface, continue to [E2eeBackend](e2ee-backend.md).
+
+If you want to go deeper into field mapping and validation, continue to [Modeling Entities](modeling-entities.md).

@@ -14,23 +14,17 @@ The user documentation is now split into focused subpages so the package can be 
 
 ## Recommended Default
 
-Prefer `defineEntityModel(...)` plus `createEntityClient(...)` for new work.
+Prefer `E2eeBackend` for browser applications that want the package to manage password-derived key state, browser persistence, and context injection.
 
-If your app also wants the package to manage password-derived key state, browser persistence, and context injection, start one layer higher with `E2eeBackend`.
+Use `defineEntityModel(...)` plus `createEntityClient(...)` directly when you want the same repository and model-building behavior without the stateful orchestration layer.
 
 That path gives you:
 
 - one place to declare local and remote field mapping
 - runtime validation before encrypting and after decrypting
 - per-model repository generation from a single `models` object
-- an easy upgrade path to custom model-specific service surfaces
+- an easy upgrade path to custom model-specific service surfaces or a higher-level root backend object
 
 Reach for direct `createEntityRepository(...)` wiring only if you need lower-level control than the factory API allows.
 
 If your app also talks to third-party APIs with decrypted integration config, use `createExternalE2eeApiClient(...)` rather than the repository factory. That pattern is documented in [External Datasources](user/external-datasources.md).
-
-That path is appropriate when:
-
-- you need hybrid encryption semantics
-- you can carry the extra WASM dependency in the browser
-- your threat model justifies the extra complexity

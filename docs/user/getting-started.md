@@ -51,8 +51,11 @@ Use `createEntityClient(...)` directly only when you want repository constructio
 
 ```ts
 import {
+  type CrudAdapter,
   E2eeEncryptionStrategy,
   E2eeBackendStorageStrategy,
+  type EncryptedFieldValue,
+  type PasswordAuthAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
   createStrategyRegistry,
@@ -60,6 +63,90 @@ import {
   defineEntityModel,
   field,
 } from "e2ee-client-backend";
+
+type SessionUser = {
+  email: string;
+  id: string;
+};
+
+type NoteRemoteRecord = {
+  contentEnvelope: EncryptedFieldValue;
+  id: string;
+  title: string;
+};
+
+const authAdapter: PasswordAuthAdapter<SessionUser> = {
+  async getKdfSalt(email) {
+    const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
+    const data = await response.json();
+    return data.kdfSaltBase64;
+  },
+  async login(email, authKeyMaterialHex) {
+    const response = await fetch("/api/auth/login", {
+      body: JSON.stringify({ authKeyMaterialHex, email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    return true;
+  },
+  async refresh() {
+    const response = await fetch("/api/auth/refresh", { method: "POST" });
+    return response.json();
+  },
+  async registerBegin(email) {
+    const response = await fetch("/api/auth/register-begin", {
+      body: JSON.stringify({ email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async registerComplete(email, authKeyMaterialHex) {
+    const response = await fetch("/api/auth/register-complete", {
+      body: JSON.stringify({ authKeyMaterialHex, email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+};
+
+const adapter: CrudAdapter<NoteRemoteRecord, string> = {
+  async create(input) {
+    const response = await fetch("/api/notes", {
+      body: JSON.stringify(input),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async delete(id) {
+    await fetch(`/api/notes/${id}`, { method: "DELETE" });
+  },
+  async getById(id) {
+    const response = await fetch(`/api/notes/${id}`);
+    if (response.status === 404) {
+      return null;
+    }
+    return response.json();
+  },
+  async list() {
+    const response = await fetch("/api/notes");
+    return response.json();
+  },
+  async update(id, input) {
+    const response = await fetch(`/api/notes/${id}`, {
+      body: JSON.stringify(input),
+      headers: { "content-type": "application/json" },
+      method: "PUT",
+    });
+    return response.json();
+  },
+};
 
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
@@ -98,6 +185,8 @@ await notes.create({
 ```
 
 This is the intended browser-app entrypoint. You do not provide a manual `contextResolver`; the backend manages the active encryption key and injects it automatically for encrypted repository operations.
+
+The two adapters in this example are application-owned integration points: `authAdapter` wires password auth to your backend, and `adapter` wires one model's remote CRUD operations to your API.
 
 ## What You Get By Default
 

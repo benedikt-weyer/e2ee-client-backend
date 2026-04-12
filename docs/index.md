@@ -49,4 +49,17 @@ The package exports modules for:
 - repositories
 - dashboard and integration schemas
 
-See the [User Guide](user-guide.md) to start consuming the package, or the [Developer Guide](developer-guide.md) if you are working on the package itself.
+## Documentation Map
+
+Start here depending on what you need:
+
+- [Getting Started](user/getting-started.md) for the shortest path from install to a working encrypted client.
+- [Modeling Entities](user/modeling-entities.md) for the Prisma-like model builder, encrypted field configuration, and validation behavior.
+- [Adapters and Transports](user/adapters-and-transports.md) for GraphQL and REST integration patterns.
+- [Crypto, Auth, and Compatibility](user/crypto-auth-and-compat.md) for strategy selection, password-derived auth flows, and legacy blob migration.
+- [Advanced Usage](user/advanced-usage.md) for direct repository wiring and lower-level schema control.
+- [Architecture](developer/architecture.md) for package internals and layer boundaries.
+- [Contributing](developer/contributing.md) for local workflow and validation expectations.
+- [Release and Docs](developer/release-and-docs.md) for npm publishing and MkDocs deployment.
+
+See the [User Guide overview](user-guide.md) to start consuming the package, or the [Developer Guide overview](developer-guide.md) if you are working on the package itself.

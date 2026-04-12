@@ -21,8 +21,18 @@ theme:
 
 nav:
   - Overview: index.md
-  - User Guide: user-guide.md
-  - Developer Guide: developer-guide.md
+  - User Guide:
+      - Overview: user-guide.md
+      - Getting Started: user/getting-started.md
+      - Modeling Entities: user/modeling-entities.md
+      - Adapters and Transports: user/adapters-and-transports.md
+      - Crypto, Auth, and Compatibility: user/crypto-auth-and-compat.md
+      - Advanced Usage: user/advanced-usage.md
+  - Developer Guide:
+      - Overview: developer-guide.md
+      - Architecture: developer/architecture.md
+      - Contributing: developer/contributing.md
+      - Release and Docs: developer/release-and-docs.md
 
 markdown_extensions:
   - admonition

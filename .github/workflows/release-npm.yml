@@ -1,4 +1,4 @@
-name: release-npm
+name: Release npm Package
 
 on:
   workflow_dispatch:
@@ -66,6 +66,10 @@ jobs:
       - name: Publish to npmjs with Trusted Publishing
         id: publish_oidc
         continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ""
+          NPM_TOKEN: ""
+          NPM_PUBLISH_PREFER_TOKEN: "false"
         run: ./scripts/publish-npm.sh
 
       - name: Publish to npmjs with NPM_TOKEN fallback

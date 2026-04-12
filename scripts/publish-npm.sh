@@ -21,6 +21,11 @@ repo_root=$(cd -- "$script_dir/.." && pwd)
 
 cd "$repo_root"
 
+if [[ "${GITHUB_ACTIONS:-false}" == "true" && "${NPM_PUBLISH_PREFER_TOKEN:-false}" != "true" ]]; then
+  unset NODE_AUTH_TOKEN
+  unset NPM_TOKEN
+fi
+
 if [[
   ("${GITHUB_ACTIONS:-false}" != "true" || "${NPM_PUBLISH_PREFER_TOKEN:-false}" == "true") &&
   -z "${NODE_AUTH_TOKEN:-}" &&

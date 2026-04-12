@@ -76,8 +76,8 @@ The release workflow is configured for GitHub Actions OIDC Trusted Publishing:
 
 To enable Trusted Publishing on npmjs:
 
-1. Sign in to npmjs with the owner of the `@benedikt.weyer` scope.
-2. Open the npm settings for the package `@benedikt.weyer/e2ee-client-backend` and go to the Trusted publishers section.
+1. Sign in to npmjs with the account that owns `e2ee-client-backend`.
+2. Open the npm settings for the package `e2ee-client-backend` and go to the Trusted publishers section.
 3. Add a GitHub Actions trusted publisher for this repository.
 4. Use these values:
 	- GitHub repository owner: `benedikt-weyer`

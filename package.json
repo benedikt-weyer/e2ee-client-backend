@@ -1,5 +1,5 @@
 {
-  "name": "@benedikt.weyer/e2ee-client-backend",
+  "name": "e2ee-client-backend",
   "version": "0.1.1",
   "description": "Browser-first E2EE client backend with repository, adapter, cache, and crypto strategy abstractions.",
   "homepage": "https://github.com/benedikt-weyer/e2ee-client-backend#readme",

@@ -70,8 +70,6 @@ jobs:
         run: git tag "${{ steps.version.outputs.tag }}"
 
       - name: Publish to npmjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: ./scripts/publish-npm.sh
 
       - name: Push release commit and tag

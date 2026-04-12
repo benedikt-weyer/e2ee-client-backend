@@ -54,6 +54,8 @@ pnpm publish:npm
 
 The publish script in `scripts/publish-npm.sh` always runs build, type-check, and test before calling `npm publish` against the public npm registry. Pass through extra `npm publish` flags after `--`, for example `pnpm publish:npm -- --dry-run`.
 
+For local publishing outside GitHub Actions, authenticate with npm first by running `npm login`, or export `NPM_TOKEN` or `NODE_AUTH_TOKEN` in your shell before running the publish script.
+
 ## GitHub release workflow
 
 The repository includes a manual workflow at `.github/workflows/release-npm.yml`.
@@ -64,6 +66,29 @@ The repository includes a manual workflow at `.github/workflows/release-npm.yml`
 - If no semantic tag exists yet, it falls back to the current `package.json` version and increments from there.
 - It updates `package.json`, creates a release commit, creates a `vX.Y.Z` git tag, publishes to npmjs, and then pushes the commit and tag back to GitHub.
 
-Required repository secret:
+## Trusted Publishing
 
-- `NPM_TOKEN`: npm access token with permission to publish this package on npmjs.
+The release workflow is configured for GitHub Actions OIDC Trusted Publishing:
+
+- The workflow already requests `id-token: write` in `.github/workflows/release-npm.yml`.
+- The publish script automatically adds `--provenance` when it runs inside GitHub Actions.
+- Once Trusted Publishing is configured in npm, the GitHub workflow does not need `NPM_TOKEN`.
+
+To enable Trusted Publishing on npmjs:
+
+1. Sign in to npmjs with the owner of the `@benedikt.weyer` scope.
+2. Open the npm settings for the package `@benedikt.weyer/e2ee-client-backend` and go to the Trusted publishers section.
+3. Add a GitHub Actions trusted publisher for this repository.
+4. Use these values:
+	- GitHub repository owner: `benedikt-weyer`
+	- GitHub repository name: `e2ee-client-backend`
+	- Workflow file: `release-npm.yml`
+	- Environment: leave empty unless you later protect releases with a GitHub environment
+5. Save the trusted publisher configuration in npm.
+6. Trigger the `Release npm Package` workflow from GitHub Actions.
+
+If the package does not exist on npm yet and npm does not let you configure Trusted Publishing before the first release, publish the first version manually with `npm login` or `NPM_TOKEN`, then switch the GitHub workflow over to Trusted Publishing for all later releases.
+
+Optional fallback secret:
+
+- `NPM_TOKEN`: only needed if you want token-based publishing as a fallback or for non-OIDC environments.

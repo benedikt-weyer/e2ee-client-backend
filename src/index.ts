@@ -1,6 +1,7 @@
 export * from "./adapters/contracts";
 export * from "./adapters/graphql";
 export * from "./adapters/rest";
+export * from "./auth/password-auth-client";
 export * from "./cache/loki-cache";
 export * from "./compat/legacy-json-blob";
 export * from "./crypto/aes-gcm-strategy";
@@ -9,6 +10,7 @@ export * from "./crypto/mlkem-aes-gcm-strategy";
 export * from "./crypto/strategy-registry";
 export * from "./crypto/types";
 export * from "./encoding/base64";
+export * from "./external-e2ee/client";
 export * from "./repositories/entity-repository";
 export * from "./schemas/dashboard";
 export * from "./schemas/integration";

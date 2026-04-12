@@ -47,7 +47,7 @@ describe("GraphQL transport and adapter", () => {
 describe("REST transport and adapter", () => {
   it("builds URLs and JSON requests via fetch", async () => {
     const fetchMock = vi.fn().mockImplementation(async () =>
-      new Response(JSON.stringify({ id: "integration-1", displayName: "Plandera" }), {
+      new Response(JSON.stringify({ id: "integration-1", displayName: "External Tasks" }), {
         headers: {
           "Content-Type": "application/json",
         },
@@ -69,7 +69,7 @@ describe("REST transport and adapter", () => {
 
     expect(await adapter.getById("integration-1")).toEqual({
       id: "integration-1",
-      displayName: "Plandera",
+      displayName: "External Tasks",
     });
     await adapter.update("integration-1", {
       displayName: "Updated",

@@ -27,9 +27,8 @@ Browser-first TypeScript client backend for end-to-end encrypted frontend data a
 The dashboard web app consumes this package through a local file dependency. The current integration already uses the package for:
 
 - password-derived key material
-- dashboard config encryption and decryption
-- Plandera config encryption and decryption
-- REST transport creation for Plandera API calls
+- dashboard and integration config blob encryption and decryption
+- generic external E2EE API interfaces and REST transport primitives consumed by local provider modules
 - repository bridge factories in `apps/web/src/lib/client-backend.ts`
 
 The dashboard backend still stores integrations as one encrypted blob today. The package already supports partial-field encryption, but the backend migration for true partial-field storage still needs to be completed in a later iteration.

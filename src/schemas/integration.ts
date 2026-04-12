@@ -1,13 +1,7 @@
 import type { EncryptedFieldValue } from "../crypto/types";
 import type { EntitySchema } from "../repositories/entity-repository";
 
-export interface PlanderaConfig {
-  apiUrl: string;
-  authHash: string | null;
-  encryptionKey: string | null;
-  providerSecret: string | null;
-  username: string;
-}
+type IntegrationRemoteFieldValue = EncryptedFieldValue | string | null;
 
 export interface IntegrationEntity {
   apiUrl: string;
@@ -25,48 +19,16 @@ export interface IntegrationEntity {
 
 export interface IntegrationRemoteRecord {
   apiUrl: string;
-  authHash: EncryptedFieldValue | string | null;
+  authHash: IntegrationRemoteFieldValue;
   credentialMode: string;
   displayName: string;
-  encryptionKey: EncryptedFieldValue | string | null;
+  encryptionKey: IntegrationRemoteFieldValue;
   id: string;
   lastSyncedAt: string | null;
   provider: string;
-  providerSecret: EncryptedFieldValue | string | null;
+  providerSecret: IntegrationRemoteFieldValue;
   status: string;
   username: string;
-}
-
-export function integrationEntityFromPlanderaConfig(
-  summary: Omit<
-    IntegrationEntity,
-    "apiUrl" | "authHash" | "encryptionKey" | "providerSecret" | "username"
-  >,
-  config: PlanderaConfig,
-): IntegrationEntity {
-  return {
-    ...summary,
-    apiUrl: config.apiUrl,
-    authHash: config.authHash,
-    encryptionKey: config.encryptionKey,
-    providerSecret: config.providerSecret,
-    username: config.username,
-  };
-}
-
-export function planderaConfigFromIntegration(
-  entity: Pick<
-    IntegrationEntity,
-    "apiUrl" | "authHash" | "encryptionKey" | "providerSecret" | "username"
-  >,
-): PlanderaConfig {
-  return {
-    apiUrl: entity.apiUrl,
-    authHash: entity.authHash,
-    encryptionKey: entity.encryptionKey,
-    providerSecret: entity.providerSecret,
-    username: entity.username,
-  };
 }
 
 export function createIntegrationSchema(

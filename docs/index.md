@@ -54,6 +54,7 @@ The package exports modules for:
 Start here depending on what you need:
 
 - [Getting Started](user/getting-started.md) for the shortest path from install to a working encrypted client.
+- [E2eeBackend](user/e2ee-backend.md) for the stateful all-in-one API that manages password auth, browser storage, and lazy client lookup.
 - [Modeling Entities](user/modeling-entities.md) for the Prisma-like model builder, encrypted field configuration, and validation behavior.
 - [Adapters and Transports](user/adapters-and-transports.md) for GraphQL and REST integration patterns.
 - [External Datasources](user/external-datasources.md) for live third-party API access built on decrypted integration config.

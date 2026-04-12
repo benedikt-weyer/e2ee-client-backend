@@ -10,6 +10,7 @@ export * from "./crypto/key-derivation";
 export * from "./crypto/mlkem-aes-gcm-strategy";
 export * from "./crypto/strategy-registry";
 export * from "./crypto/types";
+export * from "./e2ee-backend";
 export * from "./encoding/base64";
 export * from "./external-e2ee/client";
 export * from "./repositories/entity-repository";

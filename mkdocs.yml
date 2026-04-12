@@ -24,6 +24,7 @@ nav:
   - User Guide:
       - Overview: user-guide.md
       - Getting Started: user/getting-started.md
+      - E2eeBackend: user/e2ee-backend.md
       - Modeling Entities: user/modeling-entities.md
       - Adapters and Transports: user/adapters-and-transports.md
       - External Datasources: user/external-datasources.md

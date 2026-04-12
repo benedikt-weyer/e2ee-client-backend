@@ -5,15 +5,18 @@ The user documentation is now split into focused subpages so the package can be 
 ## Suggested Reading Order
 
 1. [Getting Started](user/getting-started.md) for installation, runtime expectations, and the shortest working example.
-2. [Modeling Entities](user/modeling-entities.md) for field definitions, encrypted field flags, validation, and custom services.
-3. [Adapters and Transports](user/adapters-and-transports.md) for protocol integration over GraphQL or REST.
-4. [External Datasources](user/external-datasources.md) for provider modules that call third-party APIs such as task systems.
-5. [Crypto, Auth, and Compatibility](user/crypto-auth-and-compat.md) for crypto strategy selection, auth helpers, and legacy blob migration.
-6. [Advanced Usage](user/advanced-usage.md) if you need to bypass the top-level client factory.
+2. [E2eeBackend](user/e2ee-backend.md) for the all-in-one stateful API that manages password auth, browser storage, and client lookup.
+3. [Modeling Entities](user/modeling-entities.md) for field definitions, encrypted field flags, validation, and custom services.
+4. [Adapters and Transports](user/adapters-and-transports.md) for protocol integration over GraphQL or REST.
+5. [External Datasources](user/external-datasources.md) for provider modules that call third-party APIs such as task systems.
+6. [Crypto, Auth, and Compatibility](user/crypto-auth-and-compat.md) for crypto strategy selection, auth helpers, and legacy blob migration.
+7. [Advanced Usage](user/advanced-usage.md) if you need to bypass the higher-level orchestration layer.
 
 ## Recommended Default
 
 Prefer `defineEntityModel(...)` plus `createEntityClient(...)` for new work.
+
+If your app also wants the package to manage password-derived key state, browser persistence, and context injection, start one layer higher with `E2eeBackend`.
 
 That path gives you:
 

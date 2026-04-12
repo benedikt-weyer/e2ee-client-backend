@@ -11,76 +11,76 @@ import {
 } from "./repositories/entity-repository";
 import type { CrudAdapter } from "./adapters/contracts";
 
-type AnySchema = EntitySchema<any, any, any>;
+export type AnyEntitySchema = EntitySchema<any, any, any>;
 
-type EntityOf<TSchema extends AnySchema> =
+export type EntityOfSchema<TSchema extends AnyEntitySchema> =
   TSchema extends EntitySchema<infer TEntity, any, any> ? TEntity : never;
 
-type RemoteOf<TSchema extends AnySchema> =
+export type RemoteOfSchema<TSchema extends AnyEntitySchema> =
   TSchema extends EntitySchema<any, infer TRemote, any> ? TRemote : never;
 
-type IdOf<TSchema extends AnySchema> =
+export type IdOfSchema<TSchema extends AnyEntitySchema> =
   TSchema extends EntitySchema<any, any, infer TId> ? TId : never;
 
-type RepositoryOf<TSchema extends AnySchema> = EntityRepository<
-  EntityOf<TSchema>,
-  RemoteOf<TSchema>,
-  IdOf<TSchema>
+export type RepositoryOfSchema<TSchema extends AnyEntitySchema> = EntityRepository<
+  EntityOfSchema<TSchema>,
+  RemoteOfSchema<TSchema>,
+  IdOfSchema<TSchema>
 >;
 
-export interface ClientModelSetupContext<TSchema extends AnySchema> {
-  adapter: CrudAdapter<RemoteOf<TSchema>, IdOf<TSchema>>;
-  cache?: CacheStore<EntityOf<TSchema>, IdOf<TSchema>>;
-  contextResolver: StrategyContextResolver<EntityOf<TSchema>, RemoteOf<TSchema>>;
+export interface ClientModelSetupContext<TSchema extends AnyEntitySchema> {
+  adapter: CrudAdapter<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
+  cache?: CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>>;
+  contextResolver: StrategyContextResolver<EntityOfSchema<TSchema>, RemoteOfSchema<TSchema>>;
   modelKey: string;
-  repository: RepositoryOf<TSchema>;
+  repository: RepositoryOfSchema<TSchema>;
   schema: TSchema;
   strategies: StrategyRegistry;
 }
 
 export interface ClientModelDefinition<
-  TSchema extends AnySchema,
-  TService = RepositoryOf<TSchema>,
+  TSchema extends AnyEntitySchema,
+  TService = RepositoryOfSchema<TSchema>,
 > {
-  adapter: CrudAdapter<RemoteOf<TSchema>, IdOf<TSchema>>;
-  cache?: CacheStore<EntityOf<TSchema>, IdOf<TSchema>> | null;
-  contextResolver?: StrategyContextResolver<EntityOf<TSchema>, RemoteOf<TSchema>>;
+  adapter: CrudAdapter<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
+  cache?: CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>> | null;
+  contextResolver?: StrategyContextResolver<EntityOfSchema<TSchema>, RemoteOfSchema<TSchema>>;
   schema: TSchema;
   setup?(context: ClientModelSetupContext<TSchema>): TService;
 }
 
-type ClientModelsMap = Record<string, ClientModelDefinition<AnySchema, any>>;
+export type ClientModelsMap = Record<string, ClientModelDefinition<AnyEntitySchema, any>>;
 
-type ClientOutput<TModels extends ClientModelsMap> = {
+export type ClientOutput<TModels extends ClientModelsMap> = {
   [TKey in keyof TModels]: TModels[TKey] extends ClientModelDefinition<any, infer TService>
     ? TService
     : never;
 };
 
 export interface CreateEntityClientOptions<TModels extends ClientModelsMap> {
-  cacheFactory?: <TSchema extends AnySchema>(args: {
+  cacheFactory?: <TSchema extends AnyEntitySchema>(args: {
     modelKey: string;
     schema: TSchema;
-  }) => CacheStore<EntityOf<TSchema>, IdOf<TSchema>> | null;
+  }) => CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>> | null;
   contextResolver?: StrategyContextResolver<any, any>;
   models: TModels;
   strategies: StrategyRegistry;
 }
 
 export function defineClientModel<
-  TSchema extends AnySchema,
-  TService = RepositoryOf<TSchema>,
+  TSchema extends AnyEntitySchema,
+  TService = RepositoryOfSchema<TSchema>,
 >(
   definition: ClientModelDefinition<TSchema, TService>,
 ): ClientModelDefinition<TSchema, TService> {
   return definition;
 }
 
-function resolveCache<TSchema extends AnySchema>(args: {
+function resolveCache<TSchema extends AnyEntitySchema>(args: {
   cacheFactory?: CreateEntityClientOptions<any>["cacheFactory"];
   definition: ClientModelDefinition<TSchema, any>;
   modelKey: string;
-}): CacheStore<EntityOf<TSchema>, IdOf<TSchema>> | undefined {
+}): CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>> | undefined {
   if (args.definition.cache !== undefined) {
     return args.definition.cache ?? undefined;
   }
@@ -94,10 +94,10 @@ function resolveCache<TSchema extends AnySchema>(args: {
     );
   }
 
-  return createLokiCacheStore<EntityOf<TSchema>, IdOf<TSchema>>();
+  return createLokiCacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>>();
 }
 
-function createModelOutput<TSchema extends AnySchema, TService>(args: {
+export function createClientModelOutput<TSchema extends AnyEntitySchema, TService>(args: {
   definition: ClientModelDefinition<TSchema, TService>;
   modelKey: string;
   options: CreateEntityClientOptions<any>;
@@ -121,9 +121,9 @@ function createModelOutput<TSchema extends AnySchema, TService>(args: {
     schema: args.definition.schema,
     strategies: args.options.strategies,
   } as {
-    adapter: CrudAdapter<RemoteOf<TSchema>, IdOf<TSchema>>;
-    cache?: CacheStore<EntityOf<TSchema>, IdOf<TSchema>>;
-    contextResolver: StrategyContextResolver<EntityOf<TSchema>, RemoteOf<TSchema>>;
+    adapter: CrudAdapter<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
+    cache?: CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>>;
+    contextResolver: StrategyContextResolver<EntityOfSchema<TSchema>, RemoteOfSchema<TSchema>>;
     schema: TSchema;
     strategies: StrategyRegistry;
   };
@@ -132,7 +132,7 @@ function createModelOutput<TSchema extends AnySchema, TService>(args: {
     repositoryOptions.cache = cache;
   }
 
-  const repository = createEntityRepository(repositoryOptions) as RepositoryOf<TSchema>;
+  const repository = createEntityRepository(repositoryOptions) as RepositoryOfSchema<TSchema>;
 
   if (!args.definition.setup) {
     return repository as TService;
@@ -160,7 +160,7 @@ export function createEntityClient<TModels extends ClientModelsMap>(
   const output = {} as ClientOutput<TModels>;
 
   for (const [modelKey, definition] of Object.entries(options.models)) {
-    output[modelKey as keyof TModels] = createModelOutput({
+    output[modelKey as keyof TModels] = createClientModelOutput({
       definition,
       modelKey,
       options,

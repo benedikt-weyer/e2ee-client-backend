@@ -6,6 +6,8 @@ Browser-first TypeScript client backend for end-to-end encrypted frontend data a
 
 The intended entrypoint is the model builder plus the one-shot client factory.
 
+If you want one stateful object to own password auth, browser storage, context resolution, model registration, and lazy client creation, use `E2eeBackend`. That higher-level API is documented in `docs/user/e2ee-backend.md`.
+
 ```ts
 import {
 	createAes256GcmStrategy,
@@ -59,6 +61,7 @@ Use this path unless you explicitly need low-level repository wiring. The direct
 - Adapter interfaces for GraphQL and REST backends.
 - A LokiJS-backed in-memory cache for decrypted entities.
 - A higher-level client factory that builds repositories or custom per-model services from one `models` object.
+- A highest-level `E2eeBackend` orchestration layer that can manage password auth, browser storage, context resolution, and lazy model or service registration.
 - A generic encrypted-field repository layer that behaves like a small frontend ORM.
 - AES-256-GCM encryption compatible with the current dashboard flow.
 - A WASM-backed post-quantum envelope strategy using ML-KEM-768 plus AES-256-GCM.

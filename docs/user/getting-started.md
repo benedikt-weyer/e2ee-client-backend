@@ -49,6 +49,10 @@ Use `createEntityClient(...)` directly only when you want repository constructio
 
 ## Minimal E2eeBackend Examples
 
+Each example below is self-contained and can be copied independently.
+
+### GraphQL
+
 ```ts
 import {
   E2eeEncryptionStrategy,
@@ -56,10 +60,8 @@ import {
   type EncryptedFieldValue,
   type PasswordAuthAdapter,
   GraphqlCrudAdapter,
-  RestCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
-  createFetchRestTransport,
   createGraphqlTransport,
   createStrategyRegistry,
   defineClientModel,
@@ -128,13 +130,7 @@ const noteModel = defineEntityModel({
   idField: "id",
   name: "note",
 });
-```
 
-Pick the adapter style that matches your backend protocol.
-
-### GraphQL
-
-```ts
 const graphqlTransport = createGraphqlTransport(async ({ document, variables }) => {
   const response = await fetch("/graphql", {
     body: JSON.stringify({ query: String(document), variables }),
@@ -211,10 +207,87 @@ await graphqlNotes.create({
 
 ```ts
 import {
+  E2eeEncryptionStrategy,
+  E2eeBackendStorageStrategy,
+  type EncryptedFieldValue,
+  type PasswordAuthAdapter,
+  GraphqlCrudAdapter,
+  createAes256GcmStrategy,
+  createE2eeBackend,
+  createGraphqlTransport,
+  createStrategyRegistry,
+  defineClientModel,
+  defineEntityModel,
+  field,
+} from "e2ee-client-backend";
+
+import {
   gql,
   type ApolloClient,
   type NormalizedCacheObject,
 } from "@apollo/client";
+
+type SessionUser = {
+  email: string;
+  id: string;
+};
+
+type NoteRemoteRecord = {
+  content: EncryptedFieldValue;
+  id: string;
+  title: string;
+};
+
+const authAdapter: PasswordAuthAdapter<SessionUser> = {
+  async getKdfSalt(email) {
+    const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
+    const data = await response.json();
+    return data.kdfSaltBase64;
+  },
+  async login(email, authKeyMaterialHex) {
+    const response = await fetch("/api/auth/login", {
+      body: JSON.stringify({ authKeyMaterialHex, email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    return true;
+  },
+  async refresh() {
+    const response = await fetch("/api/auth/refresh", { method: "POST" });
+    return response.json();
+  },
+  async registerBegin(email) {
+    const response = await fetch("/api/auth/register-begin", {
+      body: JSON.stringify({ email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async registerComplete(email, authKeyMaterialHex) {
+    const response = await fetch("/api/auth/register-complete", {
+      body: JSON.stringify({ authKeyMaterialHex, email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+};
+
+const noteModel = defineEntityModel({
+  cacheCollection: "notes",
+  fields: {
+    id: field.string(),
+    title: field.string(),
+    content: field.string().encrypted(),
+  },
+  idField: "id",
+  name: "note",
+});
 
 const CREATE_NOTE = gql`
   mutation CreateNote($input: NoteInput!) {
@@ -327,11 +400,98 @@ const apolloBackend = createE2eeBackend({
   storageKey: "my-app.e2ee.v1",
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
+
+await apolloBackend.loginWithPassword("ops@example.com", "top-secret-password");
+
+const apolloNotes = apolloBackend.getClient("notes");
+
+await apolloNotes.create({
+  content: "Encrypted text",
+  id: crypto.randomUUID(),
+  title: "First note",
+});
 ```
 
 ### REST
 
 ```ts
+import {
+  E2eeEncryptionStrategy,
+  E2eeBackendStorageStrategy,
+  type EncryptedFieldValue,
+  type PasswordAuthAdapter,
+  RestCrudAdapter,
+  createAes256GcmStrategy,
+  createE2eeBackend,
+  createFetchRestTransport,
+  createStrategyRegistry,
+  defineClientModel,
+  defineEntityModel,
+  field,
+} from "e2ee-client-backend";
+
+type SessionUser = {
+  email: string;
+  id: string;
+};
+
+type NoteRemoteRecord = {
+  content: EncryptedFieldValue;
+  id: string;
+  title: string;
+};
+
+const authAdapter: PasswordAuthAdapter<SessionUser> = {
+  async getKdfSalt(email) {
+    const response = await fetch(`/api/auth/kdf-salt?email=${encodeURIComponent(email)}`);
+    const data = await response.json();
+    return data.kdfSaltBase64;
+  },
+  async login(email, authKeyMaterialHex) {
+    const response = await fetch("/api/auth/login", {
+      body: JSON.stringify({ authKeyMaterialHex, email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    return true;
+  },
+  async refresh() {
+    const response = await fetch("/api/auth/refresh", { method: "POST" });
+    return response.json();
+  },
+  async registerBegin(email) {
+    const response = await fetch("/api/auth/register-begin", {
+      body: JSON.stringify({ email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+  async registerComplete(email, authKeyMaterialHex) {
+    const response = await fetch("/api/auth/register-complete", {
+      body: JSON.stringify({ authKeyMaterialHex, email }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    return response.json();
+  },
+};
+
+const noteModel = defineEntityModel({
+  cacheCollection: "notes",
+  fields: {
+    id: field.string(),
+    title: field.string(),
+    content: field.string().encrypted(),
+  },
+  idField: "id",
+  name: "note",
+});
+
 const restTransport = createFetchRestTransport({
   baseUrl: "/api",
   defaultHeaders: {

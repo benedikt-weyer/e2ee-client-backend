@@ -2,10 +2,63 @@
 
 Browser-first TypeScript client backend for end-to-end encrypted frontend data access.
 
+## Quick Start
+
+The intended entrypoint is the model builder plus the one-shot client factory.
+
+```ts
+import {
+	createAes256GcmStrategy,
+	createEntityClient,
+	createStrategyRegistry,
+	defineClientModel,
+	defineEntityModel,
+	field,
+} from "e2ee-client-backend";
+
+const dashboardModel = defineEntityModel({
+	cacheCollection: "dashboards",
+	defaultStrategyId: "aes-256-gcm",
+	fields: {
+		id: field.string(),
+		name: field.string(),
+		secretFilter: field.string().nullable().encrypted(),
+	},
+	idField: "id",
+	name: "dashboard",
+});
+
+const client = createEntityClient({
+	contextResolver: {
+		async resolve() {
+			return {
+				key: crypto.getRandomValues(new Uint8Array(32)),
+			};
+		},
+	},
+	models: {
+		dashboards: defineClientModel({
+			adapter,
+			schema: dashboardModel,
+		}),
+	},
+	strategies: createStrategyRegistry(createAes256GcmStrategy()),
+});
+
+await client.dashboards.create({
+	id: crypto.randomUUID(),
+	name: "Main dashboard",
+	secretFilter: null,
+});
+```
+
+Use this path unless you explicitly need low-level repository wiring. The direct `EntitySchema` plus `createEntityRepository(...)` layer is still available, but it is documented as advanced usage in `docs/user-guide.md`.
+
 ## What is implemented
 
 - Adapter interfaces for GraphQL and REST backends.
 - A LokiJS-backed in-memory cache for decrypted entities.
+- A higher-level client factory that builds repositories or custom per-model services from one `models` object.
 - A generic encrypted-field repository layer that behaves like a small frontend ORM.
 - AES-256-GCM encryption compatible with the current dashboard flow.
 - A WASM-backed post-quantum envelope strategy using ML-KEM-768 plus AES-256-GCM.
@@ -17,6 +70,7 @@ Browser-first TypeScript client backend for end-to-end encrypted frontend data a
 
 - `src/adapters` contains transport and CRUD adapter abstractions.
 - `src/cache` contains the LokiJS cache store.
+- `src/client-factory` contains the one-shot client assembly helpers.
 - `src/compat` contains helpers for the dashboard's current ciphertext plus nonce format.
 - `src/crypto` contains key derivation and encryption strategies.
 - `src/repositories` contains the generic encrypted entity repository.
@@ -29,7 +83,7 @@ The dashboard web app consumes this package through a local file dependency. The
 - password-derived key material
 - dashboard and integration config blob encryption and decryption
 - generic external E2EE API interfaces and REST transport primitives consumed by local provider modules
-- repository bridge factories in `apps/web/src/lib/client-backend.ts`
+- the higher-level models-to-client factory flow in `apps/web/src/lib/client-backend.ts`
 
 The dashboard backend still stores integrations as one encrypted blob today. The package already supports partial-field encryption, but the backend migration for true partial-field storage still needs to be completed in a later iteration.
 
@@ -53,6 +107,8 @@ The repository includes a single MkDocs site with two audiences separated into d
 
 - `docs/user-guide.md` for package consumers
 - `docs/developer-guide.md` for contributors and maintainers
+
+Start with the factory-based quick start in `docs/user-guide.md`. The lower-level repository API is documented later in that guide under advanced usage.
 
 Local docs workflow:
 

@@ -7,6 +7,7 @@ The package source is organized by responsibility:
 - `src/adapters`: GraphQL and REST transport plus CRUD adapter abstractions
 - `src/auth`: password-based client auth helpers
 - `src/cache`: LokiJS cache implementation
+- `src/client-factory.ts`: one-shot client assembly from a `models` object
 - `src/compat`: compatibility helpers for legacy encrypted blobs
 - `src/crypto`: encryption strategies, key derivation, and crypto types
 - `src/encoding`: byte and base64 helpers
@@ -18,15 +19,18 @@ The package source is organized by responsibility:
 
 ## Model Definition Layer
 
-The preferred public API is now `defineEntityModel` plus the `field` builder helpers.
+The preferred public API is now `defineEntityModel`, `defineClientModel`, and `createEntityClient`.
 
-That layer sits above the lower-level `EntitySchema` contract and generates:
+That stack sits above the lower-level `EntitySchema` and `EntityRepository` contracts and generates:
 
 - `createEntity` and `createRemote` mappings
 - encrypted field policies for the repository
 - runtime validation for entity input and remote payloads
+- repository or service instances for each model from a single `models` object
 
 Use the lower-level `EntitySchema` interface only when you need behavior that cannot be expressed with the builder.
+
+Consumer-facing docs should lead with this layer first and treat direct repository wiring as advanced usage.
 
 Typical example:
 
@@ -39,9 +43,22 @@ const model = defineEntityModel({
 	idField: "id",
 	name: "user",
 });
+
+const client = createEntityClient({
+	contextResolver,
+	models: {
+		users: defineClientModel({
+			adapter,
+			schema: model,
+		}),
+	},
+	strategies,
+});
 ```
 
 For structured fields, always prefer `field.json(z.object(...))` over generic `unknown` shapes so the repository can validate before encrypting and after decrypting.
+
+Use `setup({ repository, adapter, ... })` on `defineClientModel(...)` when the app should receive a custom service surface instead of the raw CRUD repository.
 
 ## Local Development
 

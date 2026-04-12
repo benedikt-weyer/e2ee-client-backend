@@ -3,6 +3,7 @@ export * from "./adapters/graphql";
 export * from "./adapters/rest";
 export * from "./auth/password-auth-client";
 export * from "./cache/loki-cache";
+export * from "./client-factory";
 export * from "./compat/legacy-json-blob";
 export * from "./crypto/aes-gcm-strategy";
 export * from "./crypto/key-derivation";

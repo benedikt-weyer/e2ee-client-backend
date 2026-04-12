@@ -28,26 +28,24 @@ Most integrations follow this order:
 
 1. Define a model with the field builder API.
 2. Mark the fields that should be end-to-end encrypted.
-3. Create or choose a crypto strategy.
-4. Create a strategy registry.
-5. Build a CRUD adapter over GraphQL or REST.
-6. Create a cache store.
-7. Provide a context resolver that returns the encryption key.
-8. Create an entity repository and use it from application code.
+3. Build CRUD adapters over GraphQL or REST.
+4. Create or choose a crypto strategy.
+5. Create one entity client from a `models` object.
+6. Use the generated repositories or custom per-model services from application code.
 
-## Preferred Model API
+## Quick Start
 
-The simplest package entrypoint is `defineEntityModel`.
+The simplest package entrypoint is `defineEntityModel` together with `createEntityClient`.
 
-It lets you describe the entity in one place, similar to a Prisma model, and mark encrypted fields inline.
+This lets you describe entities in one place, similar to Prisma models, then build all repositories in a single client factory call.
 
 ```ts
 import { z } from "zod";
 import {
   createAes256GcmStrategy,
-  createEntityRepository,
-  createLokiCacheStore,
+  createEntityClient,
   createStrategyRegistry,
+  defineClientModel,
   defineEntityModel,
   field,
 } from "e2ee-client-backend";
@@ -73,9 +71,7 @@ const dashboardModel = defineEntityModel({
   name: "dashboard",
 });
 
-const repository = createEntityRepository({
-  adapter,
-  cache: createLokiCacheStore(),
+const client = createEntityClient({
   contextResolver: {
     async resolve() {
       return {
@@ -83,10 +79,19 @@ const repository = createEntityRepository({
       };
     },
   },
-  schema: dashboardModel,
+  models: {
+    dashboards: defineClientModel({
+      adapter,
+      schema: dashboardModel,
+    }),
+  },
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
+
+const repository = client.dashboards;
 ```
+
+This is the default API to build against. It gives you one place to define models, one place to attach adapters, and one typed client object to use in the app.
 
 This layer adds runtime validation automatically.
 
@@ -94,22 +99,62 @@ This layer adds runtime validation automatically.
 - Structured values should use `field.json(z.object(...))` so the package can validate before encrypting and after decrypting.
 - `remote("configEnvelope")` lets the local entity key differ from the backend field name.
 - `encrypted()` marks the field for repository-managed encryption.
+- `createEntityClient(...)` builds all repositories from one `models` object instead of making you instantiate each repository separately.
 
-## Example: Repository with AES-256-GCM
+## Custom Per-Model Services
+
+If a model needs extra app-facing helpers, use `defineClientModel({ setup(...) { ... } })`.
+
+```ts
+const client = createEntityClient({
+  contextResolver,
+  models: {
+    dashboards: defineClientModel({
+      adapter,
+      schema: dashboardModel,
+      setup({ repository }) {
+        return {
+          createNamed(name: string) {
+            return repository.create({
+              config: null,
+              id: crypto.randomUUID(),
+              name,
+            });
+          },
+          repository,
+        };
+      },
+    }),
+  },
+  strategies,
+});
+```
+
+Use this when the default CRUD repository is not the final shape you want to expose to the rest of the app.
+
+## Factory Example: AES-256-GCM
 
 ```ts
 import {
   createAes256GcmStrategy,
-  createEntityRepository,
-  createLokiCacheStore,
+  createEntityClient,
   createStrategyRegistry,
+  defineClientModel,
   defineEntityModel,
   field,
   type CrudAdapter,
-  type IntegrationRemoteRecord,
 } from "e2ee-client-backend";
 
-const adapter: CrudAdapter<IntegrationRemoteRecord, string> = {
+const adapter: CrudAdapter<
+  {
+    apiUrl: string;
+    authHash: string | null;
+    displayName: string;
+    id: string;
+    provider: string;
+  },
+  string
+> = {
   async create(input) {
     return input;
   },
@@ -139,6 +184,56 @@ const integrationModel = defineEntityModel({
   name: "integration",
 });
 
+const client = createEntityClient({
+  contextResolver: {
+    async resolve() {
+      return {
+        key: crypto.getRandomValues(new Uint8Array(32)),
+      };
+    },
+  },
+  models: {
+    integrations: defineClientModel({
+      adapter,
+      schema: integrationModel,
+    }),
+  },
+  strategies: createStrategyRegistry(createAes256GcmStrategy()),
+});
+
+const repository = client.integrations;
+```
+
+If you prefer the package-provided schemas, helpers like `createIntegrationSchema()` and `createDashboardSchema()` still work.
+
+## Advanced Usage: Direct Repository Wiring
+
+The lower-level repository API still exists for cases where the factory layer is too opinionated.
+
+Reach for it only when you need to wire repositories manually, customize cache creation per call site, or operate directly on `EntitySchema` contracts.
+
+```ts
+import {
+  createAes256GcmStrategy,
+  createEntityRepository,
+  createLokiCacheStore,
+  createStrategyRegistry,
+  defineEntityModel,
+  field,
+} from "e2ee-client-backend";
+
+const dashboardSchema = defineEntityModel({
+  cacheCollection: "dashboards",
+  defaultStrategyId: "aes-256-gcm",
+  fields: {
+    id: field.string(),
+    name: field.string(),
+    secretFilter: field.string().nullable().encrypted(),
+  },
+  idField: "id",
+  name: "dashboard",
+});
+
 const repository = createEntityRepository({
   adapter,
   cache: createLokiCacheStore(),
@@ -149,12 +244,12 @@ const repository = createEntityRepository({
       };
     },
   },
-  schema: integrationModel,
+  schema: dashboardSchema,
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 ```
 
-If you prefer the package-provided schemas, helpers like `createIntegrationSchema()` and `createDashboardSchema()` still work.
+If you do not need that level of control, stay with `createEntityClient(...)`.
 
 ## GraphQL and REST Adapters
 

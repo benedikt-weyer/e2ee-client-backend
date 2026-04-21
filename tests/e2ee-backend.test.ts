@@ -54,11 +54,13 @@ class InMemoryCrudAdapter<TRemote extends { id: string }>
 class ManualRealtimeSource<TRemote extends { id: string }>
   implements RealtimeSource<TRemote, string>
 {
-  private sink?: {
+  private sink:
+    | {
     onComplete?(): void;
     onData(event: RemoteRealtimeEvent<TRemote, string>): void;
     onError(error: unknown): void;
-  };
+  }
+    | undefined;
 
   public emit(event: RemoteRealtimeEvent<TRemote, string>) {
     this.sink?.onData(event);

@@ -18,11 +18,13 @@ import {
 class ManualRealtimeSource<TRemote, TId = string>
   implements RealtimeSource<TRemote, TId>
 {
-  private sink?: {
+  private sink:
+    | {
     onComplete?(): void;
     onData(event: RemoteRealtimeEvent<TRemote, TId>): void;
     onError(error: unknown): void;
-  };
+  }
+    | undefined;
 
   public emit(event: RemoteRealtimeEvent<TRemote, TId>): void {
     this.sink?.onData(event);

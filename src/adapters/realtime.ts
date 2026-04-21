@@ -13,7 +13,7 @@ function resolveVariables<TVariables>(
   variables?: VariablesFactory<TVariables>,
 ): TVariables | undefined {
   if (typeof variables === "function") {
-    return variables();
+    return (variables as () => TVariables | undefined)();
   }
 
   return variables;
@@ -52,13 +52,15 @@ export class TransportRealtimeSource<
     onData(event: RemoteRealtimeEvent<TRemote, TId>): void;
     onError(error: unknown): void;
   }): SubscriptionHandle {
+    const sink = {
+      onData: (payload: TPayload) => args.onData(this.options.selectEvent(payload)),
+      onError: args.onError,
+      ...(args.onComplete ? { onComplete: args.onComplete } : {}),
+    };
+
     return this.options.transport.subscribe<TPayload, TVariables>(
       this.options.document,
-      {
-        onComplete: args.onComplete,
-        onData: (payload) => args.onData(this.options.selectEvent(payload)),
-        onError: args.onError,
-      },
+      sink,
       resolveVariables(this.options.variables),
     );
   }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { CrudAdapter, RealtimeSource } from "../src/adapters/contracts";
+import type {
+  CrudAdapter,
+  RealtimeSource,
+  RemoteRealtimeEvent,
+} from "../src/adapters/contracts";
 import {
   createEntityClient,
   defineClientModel,
@@ -44,13 +48,13 @@ class InMemoryCrudAdapter<TRemote extends { id: string }>
 }
 
 class ManualRealtimeSource<TRemote extends { id: string }>
-  implements RealtimeSource<TRemote, string>
+  implements RealtimeSource<TRemote, unknown>
 {
   public subscribeCalls = 0;
 
   public subscribe(sink: {
     onComplete?(): void;
-    onData(event: { id?: string; record?: TRemote; type: "create" | "delete" | "update" }): void;
+    onData(event: RemoteRealtimeEvent<TRemote, unknown>): void;
     onError(error: unknown): void;
   }) {
     this.subscribeCalls += 1;

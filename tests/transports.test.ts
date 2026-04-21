@@ -214,7 +214,7 @@ describe("REST transport and adapter", () => {
     socket.open();
 
     expect(socket.sent).toHaveLength(1);
-    expect(JSON.parse(socket.sent[0])).toEqual({
+    expect(JSON.parse(socket.sent[0]!)).toEqual({
       document: "notes",
       id: "sub-1",
       type: "subscribe",
@@ -233,7 +233,7 @@ describe("REST transport and adapter", () => {
 
     handle.unsubscribe();
 
-    expect(JSON.parse(socket.sent[1])).toEqual({
+    expect(JSON.parse(socket.sent[1]!)).toEqual({
       id: "sub-1",
       type: "unsubscribe",
     });

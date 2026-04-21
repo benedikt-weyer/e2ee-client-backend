@@ -61,17 +61,24 @@ import {
   field,
 } from "e2ee-client-backend";
 
+// This describes the `user` object returned by login, refresh, and registration.
+// Copy this shape from your auth API response contract or GraphQL schema.
 type SessionUser = {
   email: string;
   id: string;
 };
 
+// This describes the note payload returned by your note CRUD operations.
+// Copy these fields from your GraphQL type or REST DTO for notes.
 type NoteRemoteRecord = {
   content: EncryptedFieldValue;
   id: string;
   title: string;
 };
 
+// Keep the auth operations together so it is obvious which backend contract the
+// password flow depends on. These documents must match your GraphQL schema.
+// Get the field names and arguments from the auth resolvers exposed by your API.
 const KDF_SALT = `
   query KdfSalt($email: String!) {
     kdfSalt(email: $email)
@@ -131,17 +138,8 @@ const REGISTER_COMPLETE = `
   }
 `;
 
-const noteModel = defineEntityModel({
-  cacheCollection: "notes",
-  fields: {
-    id: field.string(),
-    title: field.string(),
-    content: field.string().encrypted(),
-  },
-  idField: "id",
-  name: "note",
-});
-
+// Reuse one transport for both auth and note CRUD operations.
+// Point `/graphql` at the endpoint exposed by your app server or API gateway.
 const graphqlTransport = createGraphqlTransport(async ({ document, kind, variables }) => {
   const response = await fetch("/graphql", {
     body: JSON.stringify({ query: String(document), variables }),
@@ -160,6 +158,8 @@ const graphqlTransport = createGraphqlTransport(async ({ document, kind, variabl
   return payload.data;
 });
 
+// This wires the auth documents into the built-in password auth client.
+// Use the same transport your app already uses for authenticated GraphQL calls.
 const auth = createGraphqlPasswordAuthConfig<SessionUser>({
   documents: {
     getKdfSalt: KDF_SALT,
@@ -172,6 +172,21 @@ const auth = createGraphqlPasswordAuthConfig<SessionUser>({
   transport: graphqlTransport,
 });
 
+// This model defines which fields are encrypted locally before they are sent.
+// The field list comes from your app's domain model, not from the auth API.
+const noteModel = defineEntityModel({
+  cacheCollection: "notes",
+  fields: {
+    id: field.string(),
+    title: field.string(),
+    content: field.string().encrypted(),
+  },
+  idField: "id",
+  name: "note",
+});
+
+// This CRUD adapter maps repository operations to your note queries and mutations.
+// Get these operation names and payload shapes from your GraphQL schema.
 const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
   graphqlTransport,
   {
@@ -237,6 +252,8 @@ const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
   },
 );
 
+// Create one backend so auth, key management, storage, and repositories share state.
+// Pick the storage strategy that matches how long the user should stay signed in.
 const graphqlBackend = createE2eeBackend({
   auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
@@ -251,10 +268,12 @@ const graphqlBackend = createE2eeBackend({
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
+// These credentials usually come from your login form.
 await graphqlBackend.loginWithPassword("ops@example.com", "top-secret-password");
 
 const graphqlNotes = graphqlBackend.getClient("notes");
 
+// This input comes from your application UI or another trusted client-side workflow.
 await graphqlNotes.create({
   content: "Encrypted text",
   id: crypto.randomUUID(),
@@ -286,28 +305,24 @@ import {
   type NormalizedCacheObject,
 } from "@apollo/client";
 
+// This describes the `user` object returned by login, refresh, and registration.
+// Copy this shape from your auth API response contract or GraphQL schema.
 type SessionUser = {
   email: string;
   id: string;
 };
 
+// This describes the note payload returned by your note CRUD operations.
+// Copy these fields from your GraphQL type or REST DTO for notes.
 type NoteRemoteRecord = {
   content: EncryptedFieldValue;
   id: string;
   title: string;
 };
 
-const noteModel = defineEntityModel({
-  cacheCollection: "notes",
-  fields: {
-    id: field.string(),
-    title: field.string(),
-    content: field.string().encrypted(),
-  },
-  idField: "id",
-  name: "note",
-});
-
+// Keep the auth operations together so it is obvious which backend contract the
+// password flow depends on. These documents must match your GraphQL schema.
+// Get the field names and arguments from the auth resolvers exposed by your API.
 const GET_KDF_SALT = gql`
   query KdfSalt($email: String!) {
     kdfSalt(email: $email)
@@ -413,6 +428,8 @@ const UPDATE_NOTE = gql`
   }
 `;
 
+// This wraps your existing Apollo client in the transport shape expected by the library.
+// Use the same Apollo client instance your app already configured with auth headers.
 function createApolloGraphqlTransport(
   client: ApolloClient<NormalizedCacheObject>,
 ) {
@@ -434,8 +451,14 @@ function createApolloGraphqlTransport(
   });
 }
 
+// Provide the Apollo client you already use in the application shell.
 declare const apolloClient: ApolloClient<NormalizedCacheObject>;
 
+// Reuse one transport so auth and note CRUD calls share the same Apollo configuration.
+const apolloTransport = createApolloGraphqlTransport(apolloClient);
+
+// This wires the auth documents into the built-in password auth client.
+// Use the same transport your app already uses for authenticated GraphQL calls.
 const auth = createGraphqlPasswordAuthConfig<SessionUser>({
   documents: {
     getKdfSalt: GET_KDF_SALT,
@@ -445,11 +468,26 @@ const auth = createGraphqlPasswordAuthConfig<SessionUser>({
     registerBegin: REGISTER_BEGIN,
     registerComplete: REGISTER_COMPLETE,
   },
-  transport: createApolloGraphqlTransport(apolloClient),
+  transport: apolloTransport,
 });
 
+// This model defines which fields are encrypted locally before they are sent.
+// The field list comes from your app's domain model, not from the auth API.
+const noteModel = defineEntityModel({
+  cacheCollection: "notes",
+  fields: {
+    id: field.string(),
+    title: field.string(),
+    content: field.string().encrypted(),
+  },
+  idField: "id",
+  name: "note",
+});
+
+// This CRUD adapter maps repository operations to your note queries and mutations.
+// Get these operation names and payload shapes from your GraphQL schema.
 const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
-  createApolloGraphqlTransport(apolloClient),
+  apolloTransport,
   {
     create: {
       buildVariables: (input) => ({ input }),
@@ -477,6 +515,8 @@ const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
   },
 );
 
+// Create one backend so auth, key management, storage, and repositories share state.
+// Pick the storage strategy that matches how long the user should stay signed in.
 const apolloBackend = createE2eeBackend({
   auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
@@ -491,10 +531,12 @@ const apolloBackend = createE2eeBackend({
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
+// These credentials usually come from your login form.
 await apolloBackend.loginWithPassword("ops@example.com", "top-secret-password");
 
 const apolloNotes = apolloBackend.getClient("notes");
 
+// This input comes from your application UI or another trusted client-side workflow.
 await apolloNotes.create({
   content: "Encrypted text",
   id: crypto.randomUUID(),
@@ -520,17 +562,38 @@ import {
   field,
 } from "e2ee-client-backend";
 
+// This describes the `user` object returned by login, refresh, and registration.
+// Copy this shape from your auth API response contract or REST response body.
 type SessionUser = {
   email: string;
   id: string;
 };
 
+// This describes the note payload returned by your note CRUD operations.
+// Copy these fields from your REST DTO for notes.
 type NoteRemoteRecord = {
   content: EncryptedFieldValue;
   id: string;
   title: string;
 };
 
+// Reuse one REST transport for both auth endpoints and note CRUD routes.
+// Set `baseUrl` to the root path served by your backend or API proxy.
+const restTransport = createFetchRestTransport({
+  baseUrl: "/api",
+  defaultHeaders: {
+    accept: "application/json",
+  },
+});
+
+// This enables the built-in password auth flow for REST backends.
+// By default the library expects `/auth/*` routes; override `endpoints` if your API differs.
+const auth = createRestPasswordAuthConfig<SessionUser>({
+  transport: restTransport,
+});
+
+// This model defines which fields are encrypted locally before they are sent.
+// The field list comes from your app's domain model, not from the auth API.
 const noteModel = defineEntityModel({
   cacheCollection: "notes",
   fields: {
@@ -542,17 +605,8 @@ const noteModel = defineEntityModel({
   name: "note",
 });
 
-const restTransport = createFetchRestTransport({
-  baseUrl: "/api",
-  defaultHeaders: {
-    accept: "application/json",
-  },
-});
-
-const auth = createRestPasswordAuthConfig<SessionUser>({
-  transport: restTransport,
-});
-
+// This CRUD adapter maps repository operations to your REST routes.
+// Get these paths from the notes endpoints exposed by your backend.
 const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
   create: { path: "/notes" },
   delete: { path: (id) => `/notes/${id}` },
@@ -561,6 +615,8 @@ const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport,
   update: { path: (id) => `/notes/${id}` },
 });
 
+// Create one backend so auth, key management, storage, and repositories share state.
+// Pick the storage strategy that matches how long the user should stay signed in.
 const restBackend = createE2eeBackend({
   auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
@@ -575,10 +631,12 @@ const restBackend = createE2eeBackend({
   strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
+// These credentials usually come from your login form.
 await restBackend.loginWithPassword("ops@example.com", "top-secret-password");
 
 const restNotes = restBackend.getClient("notes");
 
+// This input comes from your application UI or another trusted client-side workflow.
 await restNotes.create({
   content: "Encrypted text",
   id: crypto.randomUUID(),

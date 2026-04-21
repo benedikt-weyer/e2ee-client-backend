@@ -319,9 +319,7 @@ export function createBackendAdapterManifest(
       expectedSchema: {
         authTables: options.database?.expectedSchema?.authTables ?? [
           "users",
-          "user_password_credentials",
-          "user_sessions",
-          "user_registration_challenges",
+          "sessions",
         ],
         entityTables: options.database?.expectedSchema?.entityTables ??
           options.entities.map((entity) => ({

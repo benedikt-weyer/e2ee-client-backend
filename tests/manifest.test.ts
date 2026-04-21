@@ -129,6 +129,10 @@ describe("backend adapter manifest", () => {
         tableName: "notes",
       },
     ]);
+    expect(manifest.database.expectedSchema.authTables).toEqual([
+      "users",
+      "sessions",
+    ]);
     expect(serializeBackendAdapterManifest(manifest)).toContain('"version": 1');
     expect(
       resolveBackendAdapterAuthUrls({

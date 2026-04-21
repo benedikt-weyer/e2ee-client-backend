@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { CrudAdapter, GraphqlTransport, RestTransport } from "../src/adapters/contracts";
+import type {
+  CrudAdapter,
+  GraphqlTransport,
+  RealtimeSource,
+  RemoteRealtimeEvent,
+  RestTransport,
+} from "../src/adapters/contracts";
 import {
   createGraphqlPasswordAuthConfig,
   createRestPasswordAuthConfig,
@@ -42,6 +48,33 @@ class InMemoryCrudAdapter<TRemote extends { id: string }>
   public async update(id: string, input: TRemote): Promise<TRemote> {
     this.items.set(id, structuredClone(input));
     return structuredClone(input);
+  }
+}
+
+class ManualRealtimeSource<TRemote extends { id: string }>
+  implements RealtimeSource<TRemote, string>
+{
+  private sink?: {
+    onComplete?(): void;
+    onData(event: RemoteRealtimeEvent<TRemote, string>): void;
+    onError(error: unknown): void;
+  };
+
+  public emit(event: RemoteRealtimeEvent<TRemote, string>) {
+    this.sink?.onData(event);
+  }
+
+  public subscribe(sink: {
+    onComplete?(): void;
+    onData(event: RemoteRealtimeEvent<TRemote, string>): void;
+    onError(error: unknown): void;
+  }) {
+    this.sink = sink;
+    return {
+      unsubscribe: () => {
+        this.sink = undefined;
+      },
+    };
   }
 }
 
@@ -253,5 +286,89 @@ describe("E2eeBackend", () => {
       userEmail: null,
     });
     expect(store.load()).toBeNull();
+  });
+
+  it("wires per-model realtime support through backend-managed clients", async () => {
+    const store = new SharedStore();
+    const adapter = new InMemoryCrudAdapter<{
+      id: string;
+      name: string;
+      secretEnvelope: EncryptedFieldValue | string;
+    }>();
+    const source = new ManualRealtimeSource<{
+      id: string;
+      name: string;
+      secretEnvelope: EncryptedFieldValue | string;
+    }>();
+
+    const noteModel = defineEntityModel({
+      fields: {
+        id: field.string(),
+        name: field.string(),
+        secret: field.string().remote("secretEnvelope").encrypted(),
+      },
+      idField: "id",
+      name: "note",
+    });
+
+    const backend = createE2eeBackend({
+      auth: createGraphqlAuth(),
+      defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
+      storage: store,
+    }).registerModel(
+      "notes",
+      defineClientModel({
+        adapter,
+        realtime: {
+          autoStart: true,
+          source,
+        },
+        schema: noteModel,
+      }),
+    );
+
+    await backend.loginWithPassword("ops@example.com", "top-secret-password");
+
+    const seedingEntity = await backend.getClient("notes").create({
+      id: "note-live",
+      name: "Primary",
+      secret: "Encrypted note",
+    });
+
+    const pushedRemote = adapter.items.get(seedingEntity.id);
+    expect(pushedRemote).toBeTruthy();
+
+    const updatedRemote = {
+      ...(pushedRemote as {
+        id: string;
+        name: string;
+        secretEnvelope: EncryptedFieldValue | string;
+      }),
+      name: "Primary Updated",
+    };
+
+    const events: string[] = [];
+    const updateSeen = new Promise<void>((resolve) => {
+      const unsubscribe = backend.getClient("notes").subscribe((event) => {
+        events.push(event.type);
+        if (event.type === "update") {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+
+    source.emit({
+      record: updatedRemote,
+      type: "update",
+    });
+    await updateSeen;
+
+    expect(await backend.getClient("notes").getById("note-live", { cacheMode: "cache-first" })).toEqual({
+      ...seedingEntity,
+      name: "Primary Updated",
+    });
+    expect(events).toContain("update");
+    expect(backend.getClient("notes").realtime?.isConnected()).toBe(true);
   });
 });

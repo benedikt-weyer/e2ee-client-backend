@@ -1,6 +1,29 @@
-import type { CrudAdapter, GraphqlTransport } from "./contracts";
+import type {
+  CrudAdapter,
+  GraphqlTransport,
+  SubscriptionHandle,
+  SubscriptionSink,
+  SubscriptionTransport,
+} from "./contracts";
 
 export type GraphqlOperationKind = "mutation" | "query";
+
+export interface GraphqlSubscriptionExecutorInput<
+  TResult = unknown,
+  TVariables = Record<string, unknown>,
+> {
+  document: unknown;
+  kind: "subscription";
+  sink: SubscriptionSink<TResult>;
+  variables?: TVariables;
+}
+
+export type GraphqlSubscriptionExecutor = <
+  TResult,
+  TVariables = Record<string, unknown>,
+>(
+  input: GraphqlSubscriptionExecutorInput<TResult, TVariables>,
+) => SubscriptionHandle;
 
 export interface GraphqlExecutorInput<TVariables = Record<string, unknown>> {
   document: unknown;
@@ -49,6 +72,35 @@ export class FunctionGraphqlTransport implements GraphqlTransport {
         : {
             document,
             kind: "query",
+            variables,
+          },
+    );
+  }
+}
+
+export class FunctionGraphqlSubscriptionTransport
+  implements SubscriptionTransport
+{
+  public constructor(
+    private readonly executor: GraphqlSubscriptionExecutor,
+  ) {}
+
+  public subscribe<TResult, TVariables = Record<string, unknown>>(
+    document: unknown,
+    sink: SubscriptionSink<TResult>,
+    variables?: TVariables,
+  ): SubscriptionHandle {
+    return this.executor<TResult, TVariables>(
+      variables === undefined
+        ? {
+            document,
+            kind: "subscription",
+            sink,
+          }
+        : {
+            document,
+            kind: "subscription",
+            sink,
             variables,
           },
     );
@@ -175,4 +227,10 @@ export function createGraphqlTransport(
   executor: GraphqlExecutor,
 ): FunctionGraphqlTransport {
   return new FunctionGraphqlTransport(executor);
+}
+
+export function createGraphqlSubscriptionTransport(
+  executor: GraphqlSubscriptionExecutor,
+): FunctionGraphqlSubscriptionTransport {
+  return new FunctionGraphqlSubscriptionTransport(executor);
 }

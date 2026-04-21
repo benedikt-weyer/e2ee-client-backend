@@ -6,6 +6,40 @@ export interface CrudAdapter<TRemote, TId = string> {
   update(id: TId, input: TRemote): Promise<TRemote>;
 }
 
+export interface SubscriptionSink<TValue> {
+  onComplete?(): void;
+  onData(value: TValue): void;
+  onError(error: unknown): void;
+}
+
+export interface SubscriptionHandle {
+  unsubscribe(): void;
+}
+
+export interface SubscriptionTransport {
+  subscribe<TResult, TVariables = Record<string, unknown>>(
+    document: unknown,
+    sink: SubscriptionSink<TResult>,
+    variables?: TVariables,
+  ): SubscriptionHandle;
+}
+
+export type RemoteRealtimeEvent<TRemote, TId = string> =
+  | {
+      record: TRemote;
+      type: "create" | "update";
+    }
+  | {
+      id: TId;
+      type: "delete";
+    };
+
+export interface RealtimeSource<TRemote, TId = string> {
+  subscribe(
+    sink: SubscriptionSink<RemoteRealtimeEvent<TRemote, TId>>,
+  ): SubscriptionHandle;
+}
+
 export interface GraphqlTransport {
   mutate<TResult, TVariables = Record<string, unknown>>(
     document: unknown,

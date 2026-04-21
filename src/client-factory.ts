@@ -5,6 +5,8 @@ import {
 import { StrategyRegistry } from "./crypto/strategy-registry";
 import {
   createEntityRepository,
+  type EntityRepositoryRealtimeConfig,
+  type EntityRepositoryRealtimeController,
   type EntityRepository,
   type EntitySchema,
   type StrategyContextResolver,
@@ -33,6 +35,7 @@ export interface ClientModelSetupContext<TSchema extends AnyEntitySchema> {
   cache?: CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>>;
   contextResolver: StrategyContextResolver<EntityOfSchema<TSchema>, RemoteOfSchema<TSchema>>;
   modelKey: string;
+  realtime?: EntityRepositoryRealtimeController;
   repository: RepositoryOfSchema<TSchema>;
   schema: TSchema;
   strategies: StrategyRegistry;
@@ -45,6 +48,7 @@ export interface ClientModelDefinition<
   adapter: CrudAdapter<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
   cache?: CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>> | null;
   contextResolver?: StrategyContextResolver<EntityOfSchema<TSchema>, RemoteOfSchema<TSchema>>;
+  realtime?: EntityRepositoryRealtimeConfig<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
   schema: TSchema;
   setup?(context: ClientModelSetupContext<TSchema>): TService;
 }
@@ -118,12 +122,14 @@ export function createClientModelOutput<TSchema extends AnyEntitySchema, TServic
   const repositoryOptions = {
     adapter: args.definition.adapter,
     contextResolver,
+    ...(args.definition.realtime ? { realtime: args.definition.realtime } : {}),
     schema: args.definition.schema,
     strategies: args.options.strategies,
   } as {
     adapter: CrudAdapter<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
     cache?: CacheStore<EntityOfSchema<TSchema>, IdOfSchema<TSchema>>;
     contextResolver: StrategyContextResolver<EntityOfSchema<TSchema>, RemoteOfSchema<TSchema>>;
+    realtime?: EntityRepositoryRealtimeConfig<RemoteOfSchema<TSchema>, IdOfSchema<TSchema>>;
     schema: TSchema;
     strategies: StrategyRegistry;
   };
@@ -149,6 +155,10 @@ export function createClientModelOutput<TSchema extends AnyEntitySchema, TServic
 
   if (cache) {
     setupContext.cache = cache;
+  }
+
+  if (repository.realtime) {
+    setupContext.realtime = repository.realtime;
   }
 
   return args.definition.setup(setupContext);

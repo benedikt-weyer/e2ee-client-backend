@@ -1,4 +1,8 @@
-import type { CrudAdapter } from "../adapters/contracts";
+import type {
+  CrudAdapter,
+  RealtimeSource,
+  SubscriptionHandle,
+} from "../adapters/contracts";
 import type { CacheStore } from "../cache/loki-cache";
 import { StrategyRegistry } from "../crypto/strategy-registry";
 import {
@@ -114,33 +118,124 @@ export interface RepositoryReadOptions {
   cacheMode?: "cache-first" | "network-first" | "no-cache";
 }
 
+export interface EntityRepositoryRealtimeConfig<TRemote, TId = string> {
+  autoStart?: boolean;
+  source: RealtimeSource<TRemote, TId>;
+}
+
+export type EntityRepositoryChangeEvent<TEntity, TId = string> =
+  | {
+      entity: TEntity;
+      id: TId;
+      origin: "local" | "realtime";
+      type: "create" | "update";
+    }
+  | {
+      id: TId;
+      origin: "local" | "realtime";
+      type: "delete";
+    }
+  | {
+      error: unknown;
+      origin: "realtime";
+      type: "error";
+    };
+
+export interface EntityRepositoryRealtimeController {
+  connect(): () => void;
+  disconnect(): void;
+  isConnected(): boolean;
+}
+
 export interface EntityRepositoryOptions<TEntity, TRemote, TId = string> {
   adapter: CrudAdapter<TRemote, TId>;
   cache?: CacheStore<TEntity, TId>;
   contextResolver: StrategyContextResolver<TEntity, TRemote>;
+  realtime?: EntityRepositoryRealtimeConfig<TRemote, TId>;
   schema: EntitySchema<TEntity, TRemote, TId>;
   strategies: StrategyRegistry;
 }
 
 export class EntityRepository<TEntity, TRemote, TId = string> {
   private readonly cacheCollection: string;
+  private readonly changeListeners = new Set<
+    (event: EntityRepositoryChangeEvent<TEntity, TId>) => void
+  >();
   private readonly idPath: string;
+  private realtimeSubscription: SubscriptionHandle | null = null;
+
+  public readonly realtime?: EntityRepositoryRealtimeController;
 
   public constructor(private readonly options: EntityRepositoryOptions<TEntity, TRemote, TId>) {
     this.cacheCollection = options.schema.cacheCollection ?? options.schema.name;
     this.idPath = options.schema.idPath ?? "id";
+
+    if (options.realtime) {
+      this.realtime = {
+        connect: () => {
+          this.connectRealtime();
+          return () => {
+            this.disconnectRealtime();
+          };
+        },
+        disconnect: () => {
+          this.disconnectRealtime();
+        },
+        isConnected: () => this.realtimeSubscription !== null,
+      };
+
+      if (options.realtime.autoStart) {
+        this.connectRealtime();
+      }
+    }
   }
 
   public async create(entity: TEntity): Promise<TEntity> {
     const validatedEntity = this.parseEntity(entity);
     const remote = await this.serializeEntity(validatedEntity);
     const created = await this.options.adapter.create(remote);
-    return this.hydrateRemote(created, true);
+    return this.applyRemoteUpdate(created, {
+      origin: "local",
+      type: "create",
+    });
   }
 
   public async delete(id: TId): Promise<void> {
     await this.options.adapter.delete(id);
+    this.applyRemoteDelete(id, {
+      origin: "local",
+    });
+  }
+
+  public async applyRemoteUpdate(
+    remote: TRemote,
+    args: {
+      origin?: "local" | "realtime";
+      type?: "create" | "update";
+    } = {},
+  ): Promise<TEntity> {
+    const entity = await this.hydrateRemote(remote, true);
+    this.emitChange({
+      entity,
+      id: this.resolveEntityId(entity),
+      origin: args.origin ?? "realtime",
+      type: args.type ?? "update",
+    });
+    return entity;
+  }
+
+  public applyRemoteDelete(
+    id: TId,
+    args: {
+      origin?: "local" | "realtime";
+    } = {},
+  ): void {
     this.options.cache?.remove(this.cacheCollection, id);
+    this.emitChange({
+      id,
+      origin: args.origin ?? "realtime",
+      type: "delete",
+    });
   }
 
   public async getById(
@@ -196,7 +291,19 @@ export class EntityRepository<TEntity, TRemote, TId = string> {
     const validatedEntity = this.parseEntity(entity);
     const remote = await this.serializeEntity(validatedEntity);
     const updated = await this.options.adapter.update(id, remote);
-    return this.hydrateRemote(updated, true);
+    return this.applyRemoteUpdate(updated, {
+      origin: "local",
+      type: "update",
+    });
+  }
+
+  public subscribe(
+    listener: (event: EntityRepositoryChangeEvent<TEntity, TId>) => void,
+  ): () => void {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
   }
 
   private async hydrateRemote(remote: TRemote, storeInCache: boolean): Promise<TEntity> {
@@ -219,6 +326,63 @@ export class EntityRepository<TEntity, TRemote, TId = string> {
     }
 
     return entity;
+  }
+
+  private connectRealtime(): void {
+    if (this.realtimeSubscription || !this.options.realtime) {
+      return;
+    }
+
+    this.realtimeSubscription = this.options.realtime.source.subscribe({
+      onComplete: () => {
+        this.realtimeSubscription = null;
+      },
+      onData: (event) => {
+        void this.handleRealtimeEvent(event).catch((error) => {
+          this.emitChange({
+            error,
+            origin: "realtime",
+            type: "error",
+          });
+        });
+      },
+      onError: (error) => {
+        this.emitChange({
+          error,
+          origin: "realtime",
+          type: "error",
+        });
+      },
+    });
+  }
+
+  private disconnectRealtime(): void {
+    this.realtimeSubscription?.unsubscribe();
+    this.realtimeSubscription = null;
+  }
+
+  private emitChange(event: EntityRepositoryChangeEvent<TEntity, TId>): void {
+    for (const listener of this.changeListeners) {
+      listener(event);
+    }
+  }
+
+  private async handleRealtimeEvent(event: {
+    id?: TId;
+    record?: TRemote;
+    type: "create" | "delete" | "update";
+  }): Promise<void> {
+    if (event.type === "delete") {
+      this.applyRemoteDelete(event.id as TId, {
+        origin: "realtime",
+      });
+      return;
+    }
+
+    await this.applyRemoteUpdate(event.record as TRemote, {
+      origin: "realtime",
+      type: event.type,
+    });
   }
 
   private resolveEntityId(entity: TEntity): TId {

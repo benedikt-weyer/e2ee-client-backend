@@ -686,6 +686,73 @@ The built-in `auth` configuration creates the password auth adapter internally. 
 
 `defaultStrategyId` applies to every registered model in that backend unless a field or lower-level schema explicitly overrides the strategy.
 
+## Optional Realtime Updates
+
+Realtime is opt-in per model.
+
+If a model defines `realtime`, the repository returned by `getClient(...)` can:
+
+- subscribe to local model change events with `repository.subscribe(...)`
+- apply pushed remote records through the normal decryption and cache pipeline
+- start or stop its realtime connection through `repository.realtime`
+
+Version 1 expects full pushed remote records for `create` and `update` events, plus explicit `delete` events keyed by id.
+
+```ts
+import {
+  createGraphqlSubscriptionTransport,
+  createRealtimeSource,
+  defineClientModel,
+} from "e2ee-client-backend";
+
+const noteEvents = createRealtimeSource<NoteRemoteRecord, string>({
+  document: NOTE_EVENTS_SUBSCRIPTION,
+  selectEvent: (payload) => payload.noteEvent,
+  transport: createGraphqlSubscriptionTransport(({ document, sink, variables }) => {
+    const subscription = apolloClient.subscribe({
+      query: document,
+      variables,
+    }).subscribe({
+      complete: sink.onComplete,
+      error: sink.onError,
+      next: (result) => sink.onData(result.data),
+    });
+
+    return {
+      unsubscribe() {
+        subscription.unsubscribe();
+      },
+    };
+  }),
+});
+
+const backend = createE2eeBackend({
+  models: {
+    notes: defineClientModel({
+      adapter: graphqlAdapter,
+      realtime: {
+        autoStart: true,
+        source: noteEvents,
+      },
+      schema: noteModel,
+    }),
+  },
+});
+
+const notes = backend.getClient("notes");
+
+const unsubscribe = notes.subscribe((event) => {
+  if (event.type === "update") {
+    console.log("updated entity", event.entity);
+  }
+});
+
+notes.realtime?.disconnect();
+unsubscribe();
+```
+
+If no managed encryption key is available when a pushed event arrives, the repository emits a realtime `error` event and drops that update. The simplest recovery path is to restore auth state and then refetch the affected model.
+
 ## Auth Flow
 
 If you provide `auth` configuration, `E2eeBackend` exposes the same high-level auth operations directly:

@@ -55,9 +55,14 @@ Each example below is self-contained and can be copied independently.
 
 ```ts
 import {
+  type ClientModelDefinition,
   E2eeEncryptionStrategy,
+  type E2eeBackend,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
+  type EntitySchema,
+  type GraphqlPasswordAuthConfig,
+  type GraphqlTransport,
   GraphqlCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
@@ -71,7 +76,7 @@ import {
 
 // Reuse one transport for both auth and note CRUD operations.
 // Point `/graphql` at the endpoint exposed by your app server or API gateway.
-const graphqlTransport = createGraphqlTransport(async ({ document, variables }) => {
+const graphqlTransport: GraphqlTransport = createGraphqlTransport(async ({ document, variables }) => {
   const response = await fetch("/graphql", {
     body: JSON.stringify({ query: String(document), variables }),
     headers: { "content-type": "application/json" },
@@ -108,7 +113,7 @@ const REGISTER_COMPLETE = `mutation RegisterComplete($email: String!, $authKeyMa
 
 // This wires the auth documents into the built-in password auth client.
 // Use the same transport your app already uses for authenticated GraphQL calls.
-const auth = createGraphqlPasswordAuthConfig<SessionUser>({
+const auth: GraphqlPasswordAuthConfig<SessionUser> = createGraphqlPasswordAuthConfig<SessionUser>({
   documents: {
     getKdfSalt: KDF_SALT,
     login: LOGIN,
@@ -130,7 +135,11 @@ type NoteRemoteRecord = {
 
 // This model defines which fields are encrypted locally before they are sent.
 // The field list comes from your app's domain model, not from the auth API.
-const noteModel = defineEntityModel({
+const noteModel: EntitySchema<
+  { content: string; id: string; title: string },
+  NoteRemoteRecord,
+  string
+> = defineEntityModel({
   cacheCollection: "notes",
   fields: {
     id: field.string(),
@@ -143,7 +152,7 @@ const noteModel = defineEntityModel({
 
 // This CRUD adapter maps repository operations to your note queries and mutations.
 // Get these operation names and payload shapes from your GraphQL schema.
-const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
+const graphqlAdapter: GraphqlCrudAdapter<NoteRemoteRecord, string> = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
   graphqlTransport,
   {
     create: {
@@ -174,7 +183,10 @@ const graphqlAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
 
 // Create one backend so auth, key management, storage, and repositories share state.
 // Pick the storage strategy that matches how long the user should stay signed in.
-const graphqlBackend = createE2eeBackend({
+const graphqlBackend: E2eeBackend<
+  { notes: ClientModelDefinition<typeof noteModel> },
+  SessionUser
+> = createE2eeBackend({
   auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
@@ -205,9 +217,14 @@ await graphqlNotes.create({
 
 ```ts
 import {
+  type ClientModelDefinition,
   E2eeEncryptionStrategy,
+  type E2eeBackend,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
+  type EntitySchema,
+  type GraphqlPasswordAuthConfig,
+  type GraphqlTransport,
   GraphqlCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
@@ -252,7 +269,7 @@ function createApolloGraphqlTransport(
 declare const apolloClient: ApolloClient<NormalizedCacheObject>;
 
 // Reuse one transport so auth and note CRUD calls share the same Apollo configuration.
-const apolloTransport = createApolloGraphqlTransport(apolloClient);
+const apolloTransport: GraphqlTransport = createApolloGraphqlTransport(apolloClient);
 
 // This describes the `user` object returned by login, refresh, and registration.
 // Copy this shape from your auth API response contract or GraphQL schema.
@@ -325,7 +342,7 @@ const REGISTER_COMPLETE = gql`
 
 // This wires the auth documents into the built-in password auth client.
 // Use the same transport your app already uses for authenticated GraphQL calls.
-const auth = createGraphqlPasswordAuthConfig<SessionUser>({
+const auth: GraphqlPasswordAuthConfig<SessionUser> = createGraphqlPasswordAuthConfig<SessionUser>({
   documents: {
     getKdfSalt: GET_KDF_SALT,
     login: LOGIN,
@@ -347,7 +364,11 @@ type NoteRemoteRecord = {
 
 // This model defines which fields are encrypted locally before they are sent.
 // The field list comes from your app's domain model, not from the auth API.
-const noteModel = defineEntityModel({
+const noteModel: EntitySchema<
+  { content: string; id: string; title: string },
+  NoteRemoteRecord,
+  string
+> = defineEntityModel({
   cacheCollection: "notes",
   fields: {
     id: field.string(),
@@ -406,7 +427,7 @@ const UPDATE_NOTE = gql`
 
 // This CRUD adapter maps repository operations to your note queries and mutations.
 // Get these operation names and payload shapes from your GraphQL schema.
-const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
+const apolloAdapter: GraphqlCrudAdapter<NoteRemoteRecord, string> = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
   apolloTransport,
   {
     create: {
@@ -437,7 +458,10 @@ const apolloAdapter = new GraphqlCrudAdapter<NoteRemoteRecord, string>(
 
 // Create one backend so auth, key management, storage, and repositories share state.
 // Pick the storage strategy that matches how long the user should stay signed in.
-const apolloBackend = createE2eeBackend({
+const apolloBackend: E2eeBackend<
+  { notes: ClientModelDefinition<typeof noteModel> },
+  SessionUser
+> = createE2eeBackend({
   auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
@@ -468,9 +492,14 @@ await apolloNotes.create({
 
 ```ts
 import {
+  type ClientModelDefinition,
   E2eeEncryptionStrategy,
+  type E2eeBackend,
   E2eeBackendStorageStrategy,
   type EncryptedFieldValue,
+  type EntitySchema,
+  type RestPasswordAuthConfig,
+  type RestTransport,
   RestCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
@@ -484,7 +513,7 @@ import {
 
 // Reuse one REST transport for both auth endpoints and note CRUD routes.
 // Set `baseUrl` to the root path served by your backend or API proxy.
-const restTransport = createFetchRestTransport({
+const restTransport: RestTransport = createFetchRestTransport({
   baseUrl: "/api",
   defaultHeaders: {
     accept: "application/json",
@@ -500,7 +529,7 @@ type SessionUser = {
 
 // This enables the built-in password auth flow for REST backends.
 // By default the library expects `/auth/*` routes; override `endpoints` if your API differs.
-const auth = createRestPasswordAuthConfig<SessionUser>({
+const auth: RestPasswordAuthConfig<SessionUser> = createRestPasswordAuthConfig<SessionUser>({
   transport: restTransport,
 });
 
@@ -514,7 +543,11 @@ type NoteRemoteRecord = {
 
 // This model defines which fields are encrypted locally before they are sent.
 // The field list comes from your app's domain model, not from the auth API.
-const noteModel = defineEntityModel({
+const noteModel: EntitySchema<
+  { content: string; id: string; title: string },
+  NoteRemoteRecord,
+  string
+> = defineEntityModel({
   cacheCollection: "notes",
   fields: {
     id: field.string(),
@@ -527,7 +560,7 @@ const noteModel = defineEntityModel({
 
 // This CRUD adapter maps repository operations to your REST routes.
 // Get these paths from the notes endpoints exposed by your backend.
-const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
+const restAdapter: RestCrudAdapter<NoteRemoteRecord, string> = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
   create: { path: "/notes" },
   delete: { path: (id) => `/notes/${id}` },
   getById: { path: (id) => `/notes/${id}` },
@@ -537,7 +570,10 @@ const restAdapter = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport,
 
 // Create one backend so auth, key management, storage, and repositories share state.
 // Pick the storage strategy that matches how long the user should stay signed in.
-const restBackend = createE2eeBackend({
+const restBackend: E2eeBackend<
+  { notes: ClientModelDefinition<typeof noteModel> },
+  SessionUser
+> = createE2eeBackend({
   auth,
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {

@@ -1,0 +1,349 @@
+import { z } from "zod";
+import type {
+  ModelFieldBuilder,
+  ModelFields,
+} from "./schema-builder";
+
+export const BACKEND_ADAPTER_MANIFEST_VERSION = 1 as const;
+
+export type BackendAdapterManifestVersion =
+  typeof BACKEND_ADAPTER_MANIFEST_VERSION;
+
+export type BackendAdapterSchemaType =
+  | "array"
+  | "boolean"
+  | "json"
+  | "number"
+  | "object"
+  | "string"
+  | "unknown";
+
+export interface BackendAdapterManifest {
+  auth: BackendAdapterAuthManifest;
+  database: BackendAdapterDatabaseManifest;
+  entities: BackendAdapterEntityManifest[];
+  name: string;
+  realtime?: BackendAdapterRealtimeManifest;
+  version: BackendAdapterManifestVersion;
+}
+
+export interface BackendAdapterAuthManifest {
+  mode: "password-session";
+  rest: BackendAdapterRestAuthManifest;
+  session: BackendAdapterSessionManifest;
+}
+
+export interface BackendAdapterRestAuthManifest {
+  paths: BackendAdapterRestAuthPaths;
+}
+
+export interface BackendAdapterRestAuthPaths {
+  getKdfSalt: string;
+  login: string;
+  logout: string;
+  refresh: string;
+  registerBegin: string;
+  registerComplete: string;
+}
+
+export interface BackendAdapterSessionManifest {
+  cookieNames: {
+    refresh: string;
+    session: string;
+  };
+  refreshDurationSeconds: number;
+  sessionDurationSeconds: number;
+}
+
+export interface BackendAdapterDatabaseManifest {
+  engine: "postgres";
+  expectedSchema: BackendAdapterExpectedSchemaManifest;
+}
+
+export interface BackendAdapterExpectedSchemaManifest {
+  authTables: string[];
+  entityTables: BackendAdapterExpectedEntityTableManifest[];
+}
+
+export interface BackendAdapterExpectedEntityTableManifest {
+  primaryKey: string;
+  tableName: string;
+}
+
+export interface BackendAdapterEntityManifest {
+  fields: BackendAdapterEntityFieldManifest[];
+  idPath: string;
+  name: string;
+  rest: BackendAdapterEntityRestManifest;
+  tableName: string;
+}
+
+export interface BackendAdapterEntityRestManifest {
+  allowCreate: boolean;
+  allowDelete: boolean;
+  allowGetById: boolean;
+  allowList: boolean;
+  allowUpdate: boolean;
+  basePath: string;
+}
+
+export interface BackendAdapterEntityFieldManifest {
+  encrypted: boolean;
+  entityPath: string;
+  entityType: BackendAdapterSchemaType;
+  nullable: boolean;
+  optional: boolean;
+  remotePath: string;
+  remoteType: BackendAdapterSchemaType;
+  strategyId?: string;
+}
+
+export interface BackendAdapterRealtimeManifest {
+  entities: BackendAdapterRealtimeEntityManifest[];
+  path: string;
+  protocol: "websocket";
+}
+
+export interface BackendAdapterRealtimeEntityManifest {
+  entityName: string;
+  topic: string;
+}
+
+export interface DefineBackendAdapterEntityOptions<
+  TModel extends BackendAdapterCompatibleModel<ModelFields>,
+> {
+  model: TModel;
+  rest?: Partial<Omit<BackendAdapterEntityRestManifest, "basePath">> & {
+    basePath?: string;
+  };
+  tableName?: string;
+}
+
+export interface CreateBackendAdapterManifestOptions {
+  auth: BackendAdapterAuthManifest;
+  database?: Partial<BackendAdapterDatabaseManifest> & {
+    expectedSchema?: Partial<BackendAdapterExpectedSchemaManifest>;
+  };
+  entities: BackendAdapterEntityManifest[];
+  name: string;
+  realtime?: BackendAdapterRealtimeManifest;
+}
+
+type AnyModelField = ModelFieldBuilder<any, any, string | undefined, boolean>;
+
+interface BackendAdapterCompatibleModel<TFields extends ModelFields> {
+  defaultStrategyId?: string;
+  idPath?: string;
+  name: string;
+  definition: {
+    fields: TFields;
+  };
+}
+
+function assertAbsolutePath(path: string, label: string): string {
+  if (!path.startsWith("/")) {
+    throw new Error(`${label} must start with '/'. Received "${path}".`);
+  }
+
+  return path;
+}
+
+function normalizePathSegment(value: string): string {
+  return value
+    .trim()
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replaceAll(/[^a-zA-Z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function unwrapSchema(schema: z.ZodTypeAny): {
+  nullable: boolean;
+  optional: boolean;
+  schema: z.ZodTypeAny;
+} {
+  let current = schema;
+  let nullable = false;
+  let optional = false;
+
+  while (true) {
+    if (current instanceof z.ZodOptional) {
+      optional = true;
+      current = current.unwrap() as z.ZodTypeAny;
+      continue;
+    }
+
+    if (current instanceof z.ZodNullable) {
+      nullable = true;
+      current = current.unwrap() as z.ZodTypeAny;
+      continue;
+    }
+
+    return { nullable, optional, schema: current };
+  }
+}
+
+function inferSchemaType(schema: z.ZodTypeAny): BackendAdapterSchemaType {
+  const unwrapped = unwrapSchema(schema).schema;
+
+  if (
+    unwrapped instanceof z.ZodEnum ||
+    unwrapped instanceof z.ZodLiteral ||
+    unwrapped instanceof z.ZodString
+  ) {
+    return "string";
+  }
+
+  if (unwrapped instanceof z.ZodNumber) {
+    return "number";
+  }
+
+  if (unwrapped instanceof z.ZodBoolean) {
+    return "boolean";
+  }
+
+  if (unwrapped instanceof z.ZodArray) {
+    return "array";
+  }
+
+  if (
+    unwrapped instanceof z.ZodObject ||
+    unwrapped instanceof z.ZodRecord ||
+    unwrapped instanceof z.ZodMap
+  ) {
+    return "object";
+  }
+
+  if (unwrapped instanceof z.ZodUnknown || unwrapped instanceof z.ZodAny) {
+    return "unknown";
+  }
+
+  return "json";
+}
+
+function createEntityFieldManifest(
+  entityPath: string,
+  fieldBuilder: AnyModelField,
+  defaultStrategyId: string | undefined,
+): BackendAdapterEntityFieldManifest {
+  const config = fieldBuilder.toConfig();
+  const entityDetails = unwrapSchema(config.entitySchema);
+  const remoteDetails = unwrapSchema(config.remoteSchema);
+  const strategyId = config.encrypted
+    ? (config.strategyId ?? defaultStrategyId)
+    : undefined;
+
+  const manifest: BackendAdapterEntityFieldManifest = {
+    encrypted: config.encrypted,
+    entityPath,
+    entityType: inferSchemaType(config.entitySchema),
+    nullable: entityDetails.nullable || remoteDetails.nullable,
+    optional: entityDetails.optional || remoteDetails.optional,
+    remotePath: config.remotePath ?? entityPath,
+    remoteType: inferSchemaType(config.remoteSchema),
+  };
+
+  if (strategyId) {
+    manifest.strategyId = strategyId;
+  }
+
+  return manifest;
+}
+
+export function defineBackendAdapterEntity<
+  TModel extends BackendAdapterCompatibleModel<ModelFields>,
+>(options: DefineBackendAdapterEntityOptions<TModel>): BackendAdapterEntityManifest {
+  const { model } = options;
+  const basePath = assertAbsolutePath(
+    options.rest?.basePath ?? `/entities/${normalizePathSegment(model.name)}`,
+    `REST base path for entity "${model.name}"`,
+  );
+
+  return {
+    fields: Object.entries(model.definition.fields).map(([entityPath, fieldBuilder]) =>
+      createEntityFieldManifest(
+        entityPath,
+        fieldBuilder,
+        model.defaultStrategyId,
+      ),
+    ),
+    idPath: model.idPath ?? "id",
+    name: model.name,
+    rest: {
+      allowCreate: options.rest?.allowCreate ?? true,
+      allowDelete: options.rest?.allowDelete ?? true,
+      allowGetById: options.rest?.allowGetById ?? true,
+      allowList: options.rest?.allowList ?? true,
+      allowUpdate: options.rest?.allowUpdate ?? true,
+      basePath,
+    },
+    tableName: options.tableName ?? `${normalizePathSegment(model.name)}s`,
+  };
+}
+
+export function createPasswordSessionAuthManifest(
+  input: BackendAdapterAuthManifest["rest"] & {
+    refreshDurationSeconds: number;
+    refreshCookieName?: string;
+    sessionCookieName?: string;
+    sessionDurationSeconds: number;
+  },
+): BackendAdapterAuthManifest {
+  return {
+    mode: "password-session",
+    rest: {
+      paths: input.paths,
+    },
+    session: {
+      cookieNames: {
+        refresh: input.refreshCookieName ?? "e2ee_refresh_session",
+        session: input.sessionCookieName ?? "e2ee_session",
+      },
+      refreshDurationSeconds: input.refreshDurationSeconds,
+      sessionDurationSeconds: input.sessionDurationSeconds,
+    },
+  };
+}
+
+export function createBackendAdapterManifest(
+  options: CreateBackendAdapterManifestOptions,
+): BackendAdapterManifest {
+  if (!options.entities.length) {
+    throw new Error("Backend adapter manifest requires at least one entity.");
+  }
+
+  const manifest: BackendAdapterManifest = {
+    auth: options.auth,
+    database: {
+      engine: options.database?.engine ?? "postgres",
+      expectedSchema: {
+        authTables: options.database?.expectedSchema?.authTables ?? [
+          "users",
+          "user_password_credentials",
+          "user_sessions",
+          "user_registration_challenges",
+        ],
+        entityTables: options.database?.expectedSchema?.entityTables ??
+          options.entities.map((entity) => ({
+            primaryKey: entity.idPath,
+            tableName: entity.tableName,
+          })),
+      },
+    },
+    entities: options.entities,
+    name: options.name,
+    version: BACKEND_ADAPTER_MANIFEST_VERSION,
+  };
+
+  if (options.realtime) {
+    manifest.realtime = options.realtime;
+  }
+
+  return manifest;
+}
+
+export function serializeBackendAdapterManifest(
+  manifest: BackendAdapterManifest,
+): string {
+  return `${JSON.stringify(manifest, null, 2)}\n`;
+}

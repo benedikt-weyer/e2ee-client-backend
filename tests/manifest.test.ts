@@ -7,6 +7,7 @@ import {
   createFetchRestTransport,
   createPasswordSessionAuthManifest,
   createRestCrudAdaptersFromGeneratedSchemaFile,
+  createRestTransportFromGeneratedSchemaFile,
   defineBackendAdapterEntity,
   resolveBackendAdapterAuthUrls,
   resolveBackendAdapterEntityUrl,
@@ -172,7 +173,15 @@ describe("backend adapter manifest", () => {
         tableName: "notes",
       },
     ]);
-    expect(manifest.database.expectedSchema.api).toEqual({ type: "rest" });
+    expect(manifest.database.expectedSchema.api).toEqual({
+      rest: {
+        baseUrl: "/api",
+        defaultHeaders: {
+          accept: "application/json",
+        },
+      },
+      type: "rest",
+    });
     expect(manifest.database.expectedSchema.authTables).toEqual([
       "users",
       "sessions",
@@ -314,7 +323,15 @@ describe("backend adapter manifest", () => {
     const schemas = createEntitySchemasFromGeneratedSchemaFile(
       JSON.stringify({
         expectedSchema: {
-          api: { type: "rest" },
+          api: {
+            rest: {
+              baseUrl: "/api",
+              defaultHeaders: {
+                accept: "application/json",
+              },
+            },
+            type: "rest",
+          },
           authTables: ["users", "sessions"],
           entities: [
             {
@@ -415,7 +432,15 @@ describe("backend adapter manifest", () => {
     const adapters = createRestCrudAdaptersFromGeneratedSchemaFile(
       JSON.stringify({
         expectedSchema: {
-          api: { type: "rest" },
+          api: {
+            rest: {
+              baseUrl: "/api",
+              defaultHeaders: {
+                accept: "application/json",
+              },
+            },
+            type: "rest",
+          },
           authTables: ["users", "sessions"],
           entities: [
             {
@@ -472,5 +497,78 @@ describe("backend adapter manifest", () => {
     await expect(notes.create({ id: "note-1", title: "First" })).resolves.toEqual({ id: "note-1", title: "First" });
     await expect(notes.update("note-1", { id: "note-1", title: "Updated" })).resolves.toEqual({ id: "note-1", title: "Updated" });
     await expect(notes.delete("note-1")).resolves.toBeUndefined();
+  });
+
+  it("builds REST transport defaults from the generated schema file format", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      })
+    );
+
+    const transport = createRestTransportFromGeneratedSchemaFile(
+      JSON.stringify({
+        expectedSchema: {
+          api: {
+            rest: {
+              baseUrl: "https://api.example.test/api",
+              defaultHeaders: {
+                accept: "application/json",
+              },
+            },
+            type: "rest",
+          },
+          authTables: ["users", "sessions"],
+          entities: [
+            {
+              api: {
+                rest: {
+                  allowCreate: true,
+                  allowDelete: true,
+                  allowGetById: true,
+                  allowList: true,
+                  allowUpdate: true,
+                  basePath: "/notes",
+                },
+                type: "rest",
+              },
+              fields: [
+                {
+                  encrypted: false,
+                  entityPath: "id",
+                  entityType: "string",
+                  nullable: false,
+                  optional: false,
+                  remotePath: "id",
+                  remoteType: "string",
+                },
+              ],
+              idPath: "id",
+              name: "note",
+              primaryKey: "id",
+              tableName: "notes",
+            },
+          ],
+          entityTables: [{ primaryKey: "id", tableName: "notes" }],
+        },
+      }),
+      { fetch: fetchMock },
+    );
+
+    await expect(
+      transport.request<{ ok: boolean }>({
+        method: "GET",
+        path: "/notes",
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("notes", "https://api.example.test/api/"),
+      {
+        headers: new Headers({ accept: "application/json" }),
+        method: "GET",
+      },
+    );
   });
 });

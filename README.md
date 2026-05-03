@@ -14,7 +14,7 @@ Recommended default:
 
 - export `expected-schema.json` from `e2ee-backend-adapter`
 - optionally export `e2ee-client-bindings.ts` alongside it with `--typescript-out`
-- prefer importing typed auth, schema, and REST adapter helpers from the generated TypeScript module
+- prefer importing typed transport, auth, schema, and REST adapter helpers from the generated TypeScript module
 - use handwritten `defineEntityModel(...)` only when you need custom client-only behavior that the generated schema cannot describe
 
 Backend adapter documentation for generating that file is available at <https://benedikt-weyer.github.io/e2ee-backend-adapter/>.

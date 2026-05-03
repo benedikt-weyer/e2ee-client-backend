@@ -4,10 +4,16 @@ import type {
   BackendAdapterExpectedSchemaEntityApiManifest,
   BackendAdapterExpectedSchemaEntityManifest,
   BackendAdapterExpectedSchemaManifest,
+  BackendAdapterExpectedSchemaRestApiManifest,
   BackendAdapterSchemaType,
 } from "./manifest";
 import type { RestTransport } from "./adapters/contracts";
-import { RestCrudAdapter } from "./adapters/rest";
+import {
+  createFetchRestTransport,
+  type FetchRestTransport,
+  type FetchRestTransportOptions,
+  RestCrudAdapter,
+} from "./adapters/rest";
 import type { EntitySchema } from "./repositories/entity-repository";
 import {
   defineEntityModel,
@@ -43,6 +49,17 @@ function getEntityRestApi(
   return api.rest;
 }
 
+function getSchemaRestApi(
+  schema: BackendAdapterExpectedSchemaManifest,
+): BackendAdapterExpectedSchemaRestApiManifest {
+  const api = schema.api;
+  if (!api || api.type !== "rest") {
+    throw new Error("Generated schema file does not define REST transport metadata.");
+  }
+
+  return api.rest;
+}
+
 export interface CreateGeneratedEntitySchemaOptions {
   cacheCollection?: string;
   defaultStrategyId?: EncryptionAlgorithmId;
@@ -50,6 +67,12 @@ export interface CreateGeneratedEntitySchemaOptions {
 
 export interface BackendAdapterGeneratedSchemaFile {
   expectedSchema: BackendAdapterExpectedSchemaManifest;
+}
+
+export interface CreateGeneratedRestTransportOptions {
+  baseUrl?: string;
+  defaultHeaders?: Record<string, string>;
+  fetch?: FetchRestTransportOptions["fetch"];
 }
 
 export function parseGeneratedSchemaFile(
@@ -184,6 +207,22 @@ export function createRestCrudAdaptersFromExpectedSchema<
   ]));
 }
 
+export function createRestTransportFromExpectedSchema(
+  schema: BackendAdapterExpectedSchemaManifest,
+  options: CreateGeneratedRestTransportOptions = {},
+): FetchRestTransport {
+  const rest = getSchemaRestApi(schema);
+
+  return createFetchRestTransport({
+    baseUrl: options.baseUrl ?? rest.baseUrl,
+    defaultHeaders: {
+      ...(rest.defaultHeaders ?? {}),
+      ...(options.defaultHeaders ?? {}),
+    },
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+}
+
 export function createRestCrudAdaptersFromGeneratedSchemaFile<
   TRemote = JsonObject,
   TId extends string | number = string | number,
@@ -194,5 +233,15 @@ export function createRestCrudAdaptersFromGeneratedSchemaFile<
   return createRestCrudAdaptersFromExpectedSchema<TRemote, TId>(
     parseGeneratedSchemaFile(json).expectedSchema,
     transport,
+  );
+}
+
+export function createRestTransportFromGeneratedSchemaFile(
+  json: string,
+  options: CreateGeneratedRestTransportOptions = {},
+): FetchRestTransport {
+  return createRestTransportFromExpectedSchema(
+    parseGeneratedSchemaFile(json).expectedSchema,
+    options,
   );
 }

@@ -60,7 +60,13 @@ export interface BackendAdapterDatabaseManifest {
   expectedSchema: BackendAdapterExpectedSchemaManifest;
 }
 
+export interface BackendAdapterExpectedSchemaRestApiManifest {
+  baseUrl: string;
+  defaultHeaders?: Record<string, string>;
+}
+
 export interface BackendAdapterExpectedSchemaApiManifest {
+  rest: BackendAdapterExpectedSchemaRestApiManifest;
   type: "rest";
 }
 
@@ -351,13 +357,22 @@ export function createBackendAdapterManifest(
   const expectedSchemaEntities =
     options.database?.expectedSchema?.entities ??
     options.entities.map((entity) => createExpectedSchemaEntityManifest(entity));
+  const expectedSchemaApi = options.database?.expectedSchema?.api;
 
   const manifest: BackendAdapterManifest = {
     auth: options.auth,
     database: {
       engine: options.database?.engine ?? "postgres",
       expectedSchema: {
-        api: options.database?.expectedSchema?.api ?? { type: "rest" },
+        api: {
+          rest: {
+            baseUrl: expectedSchemaApi?.rest.baseUrl ?? "/api",
+            ...(expectedSchemaApi?.rest.defaultHeaders
+              ? { defaultHeaders: expectedSchemaApi.rest.defaultHeaders }
+              : { defaultHeaders: { accept: "application/json" } }),
+          },
+          type: "rest",
+        },
         authTables: options.database?.expectedSchema?.authTables ?? [
           "users",
           "sessions",

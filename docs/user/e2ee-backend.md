@@ -51,7 +51,6 @@ Each example below is self-contained and can be copied independently.
 import {
   E2eeBackendStorageStrategy,
   createE2eeBackend,
-  createFetchRestTransport,
   defineClientModel,
 } from "e2ee-client-backend";
 
@@ -61,18 +60,11 @@ import {
   createRestCrudAdapters,
 } from "./generated/e2ee-client-bindings";
 
-const restTransport = createFetchRestTransport({
-  baseUrl: "/api",
-  defaultHeaders: {
-    accept: "application/json",
-  },
-});
-
-const auth = createRestAuthConfig(restTransport);
+const auth = createRestAuthConfig();
 
 const schemas = createEntitySchemas();
 
-const adapters = createRestCrudAdapters(restTransport);
+const adapters = createRestCrudAdapters();
 
 const restBackend = createE2eeBackend({
   auth,

@@ -4,7 +4,7 @@ import type {
   ModelFields,
 } from "./schema-builder";
 
-export const BACKEND_ADAPTER_MANIFEST_VERSION = 1 as const;
+export const BACKEND_ADAPTER_MANIFEST_VERSION = 2 as const;
 
 export type BackendAdapterManifestVersion =
   typeof BACKEND_ADAPTER_MANIFEST_VERSION;
@@ -62,7 +62,16 @@ export interface BackendAdapterDatabaseManifest {
 
 export interface BackendAdapterExpectedSchemaManifest {
   authTables: string[];
+  entities: BackendAdapterExpectedSchemaEntityManifest[];
   entityTables: BackendAdapterExpectedEntityTableManifest[];
+}
+
+export interface BackendAdapterExpectedSchemaEntityManifest {
+  fields: BackendAdapterEntityFieldManifest[];
+  idPath: string;
+  name: string;
+  primaryKey: string;
+  tableName: string;
 }
 
 export interface BackendAdapterExpectedEntityTableManifest {
@@ -250,6 +259,18 @@ function createEntityFieldManifest(
   return manifest;
 }
 
+function createExpectedSchemaEntityManifest(
+  entity: BackendAdapterEntityManifest,
+): BackendAdapterExpectedSchemaEntityManifest {
+  return {
+    fields: entity.fields.map((field) => ({ ...field })),
+    idPath: entity.idPath,
+    name: entity.name,
+    primaryKey: entity.idPath,
+    tableName: entity.tableName,
+  };
+}
+
 export function defineBackendAdapterEntity<
   TModel extends BackendAdapterCompatibleModel<ModelFields>,
 >(options: DefineBackendAdapterEntityOptions<TModel>): BackendAdapterEntityManifest {
@@ -312,6 +333,10 @@ export function createBackendAdapterManifest(
     throw new Error("Backend adapter manifest requires at least one entity.");
   }
 
+  const expectedSchemaEntities =
+    options.database?.expectedSchema?.entities ??
+    options.entities.map((entity) => createExpectedSchemaEntityManifest(entity));
+
   const manifest: BackendAdapterManifest = {
     auth: options.auth,
     database: {
@@ -321,9 +346,10 @@ export function createBackendAdapterManifest(
           "users",
           "sessions",
         ],
+        entities: expectedSchemaEntities,
         entityTables: options.database?.expectedSchema?.entityTables ??
-          options.entities.map((entity) => ({
-            primaryKey: entity.idPath,
+          expectedSchemaEntities.map((entity) => ({
+            primaryKey: entity.primaryKey,
             tableName: entity.tableName,
           })),
       },

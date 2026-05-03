@@ -16,6 +16,7 @@ export * from "./crypto/types";
 export * from "./e2ee-backend";
 export * from "./encoding/base64";
 export * from "./external-e2ee/client";
+export * from "./generated-schema";
 export * from "./manifest";
 export * from "./repositories/entity-repository";
 export * from "./schema-builder";

@@ -4,7 +4,7 @@ import type {
   ModelFields,
 } from "./schema-builder";
 
-export const BACKEND_ADAPTER_MANIFEST_VERSION = 2 as const;
+export const BACKEND_ADAPTER_MANIFEST_VERSION = 3 as const;
 
 export type BackendAdapterManifestVersion =
   typeof BACKEND_ADAPTER_MANIFEST_VERSION;
@@ -77,6 +77,12 @@ export interface BackendAdapterExpectedSchemaManifest {
   entityTables: BackendAdapterExpectedEntityTableManifest[];
 }
 
+export interface BackendAdapterExpectedEntityColumnManifest {
+  columnName: string;
+  nullable: boolean;
+  sqlType: string;
+}
+
 export interface BackendAdapterExpectedSchemaEntityApiManifest {
   rest: BackendAdapterEntityRestManifest;
   type: "rest";
@@ -92,11 +98,18 @@ export interface BackendAdapterExpectedSchemaEntityManifest {
 }
 
 export interface BackendAdapterExpectedEntityTableManifest {
+  columns: BackendAdapterExpectedEntityColumnManifest[];
   primaryKey: string;
   tableName: string;
 }
 
+export interface BackendAdapterEntityDatabaseManifest {
+  columns: BackendAdapterExpectedEntityColumnManifest[];
+  primaryKey: string;
+}
+
 export interface BackendAdapterEntityManifest {
+  database: BackendAdapterEntityDatabaseManifest;
   fields: BackendAdapterEntityFieldManifest[];
   idPath: string;
   name: string;
@@ -138,6 +151,7 @@ export interface BackendAdapterRealtimeEntityManifest {
 export interface DefineBackendAdapterEntityOptions<
   TModel extends BackendAdapterCompatibleModel<ModelFields>,
 > {
+  database?: Partial<BackendAdapterEntityDatabaseManifest>;
   model: TModel;
   rest?: Partial<Omit<BackendAdapterEntityRestManifest, "basePath">> & {
     basePath?: string;
@@ -287,8 +301,84 @@ function createExpectedSchemaEntityManifest(
     fields: entity.fields.map((field) => ({ ...field })),
     idPath: entity.idPath,
     name: entity.name,
-    primaryKey: entity.idPath,
+    primaryKey: entity.database.primaryKey,
     tableName: entity.tableName,
+  };
+}
+
+function inferDatabaseSqlType(type: BackendAdapterSchemaType): string {
+  switch (type) {
+    case "array":
+    case "json":
+    case "object":
+    case "unknown":
+      return "JSONB";
+    case "boolean":
+      return "BOOLEAN";
+    case "number":
+      return "DOUBLE PRECISION";
+    default:
+      return "TEXT";
+  }
+}
+
+function createDefaultDatabaseColumns(
+  fields: BackendAdapterEntityFieldManifest[],
+): BackendAdapterExpectedEntityColumnManifest[] {
+  const columns = new Map<string, BackendAdapterExpectedEntityColumnManifest>();
+
+  for (const field of fields) {
+    const column = {
+      columnName: field.remotePath,
+      nullable: field.nullable || field.optional,
+      sqlType: inferDatabaseSqlType(field.remoteType),
+    } satisfies BackendAdapterExpectedEntityColumnManifest;
+    const existing = columns.get(column.columnName);
+
+    if (!existing) {
+      columns.set(column.columnName, column);
+      continue;
+    }
+
+    if (
+      existing.nullable !== column.nullable ||
+      existing.sqlType !== column.sqlType
+    ) {
+      throw new Error(
+        `Entity field mappings for column "${column.columnName}" disagree on SQL type or nullability. Provide explicit database columns for this entity.`,
+      );
+    }
+  }
+
+  return [...columns.values()];
+}
+
+function createEntityDatabaseManifest(args: {
+  columns?: BackendAdapterExpectedEntityColumnManifest[];
+  fields: BackendAdapterEntityFieldManifest[];
+  idPath: string;
+  name: string;
+  primaryKey?: string;
+}): BackendAdapterEntityDatabaseManifest {
+  const columns = args.columns ?? createDefaultDatabaseColumns(args.fields);
+
+  if (!columns.length) {
+    throw new Error(`Entity "${args.name}" must define at least one database column.`);
+  }
+
+  const primaryKey = args.primaryKey
+    ?? args.fields.find((field) => field.entityPath === args.idPath)?.remotePath
+    ?? args.idPath;
+
+  if (!columns.some((column) => column.columnName === primaryKey)) {
+    throw new Error(
+      `Entity "${args.name}" database columns must include the primary key column "${primaryKey}".`,
+    );
+  }
+
+  return {
+    columns,
+    primaryKey,
   };
 }
 
@@ -296,20 +386,37 @@ export function defineBackendAdapterEntity<
   TModel extends BackendAdapterCompatibleModel<ModelFields>,
 >(options: DefineBackendAdapterEntityOptions<TModel>): BackendAdapterEntityManifest {
   const { model } = options;
+  const idPath = model.idPath ?? "id";
   const basePath = assertAbsolutePath(
     options.rest?.basePath ?? `/entities/${normalizePathSegment(model.name)}`,
     `REST base path for entity "${model.name}"`,
   );
+  const fields = Object.entries(model.definition.fields).map(([entityPath, fieldBuilder]) =>
+    createEntityFieldManifest(
+      entityPath,
+      fieldBuilder,
+      model.defaultStrategyId,
+    ),
+  );
+  const database = createEntityDatabaseManifest({
+    fields,
+    idPath,
+    name: model.name,
+    ...(options.database?.columns
+      ? { columns: options.database.columns }
+      : {}),
+    ...(options.database?.primaryKey
+      ? { primaryKey: options.database.primaryKey }
+      : {}),
+  });
 
   return {
-    fields: Object.entries(model.definition.fields).map(([entityPath, fieldBuilder]) =>
-      createEntityFieldManifest(
-        entityPath,
-        fieldBuilder,
-        model.defaultStrategyId,
-      ),
-    ),
-    idPath: model.idPath ?? "id",
+    database: {
+      columns: database.columns.map((column) => ({ ...column })),
+      primaryKey: database.primaryKey,
+    },
+    fields,
+    idPath,
     name: model.name,
     rest: {
       allowCreate: options.rest?.allowCreate ?? true,
@@ -380,6 +487,9 @@ export function createBackendAdapterManifest(
         entities: expectedSchemaEntities,
         entityTables: options.database?.expectedSchema?.entityTables ??
           expectedSchemaEntities.map((entity) => ({
+            columns: options.entities
+              .find((candidate) => candidate.name === entity.name)?.database.columns
+              .map((column) => ({ ...column })) ?? [],
             primaryKey: entity.primaryKey,
             tableName: entity.tableName,
           })),

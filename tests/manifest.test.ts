@@ -43,6 +43,31 @@ describe("backend adapter manifest", () => {
     });
 
     expect(entity).toEqual({
+      database: {
+        columns: [
+          {
+            columnName: "ciphertext",
+            nullable: false,
+            sqlType: "TEXT",
+          },
+          {
+            columnName: "id",
+            nullable: false,
+            sqlType: "TEXT",
+          },
+          {
+            columnName: "metadata",
+            nullable: true,
+            sqlType: "JSONB",
+          },
+          {
+            columnName: "title",
+            nullable: false,
+            sqlType: "TEXT",
+          },
+        ],
+        primaryKey: "id",
+      },
       fields: [
         {
           encrypted: true,
@@ -96,6 +121,53 @@ describe("backend adapter manifest", () => {
     });
   });
 
+  it("accepts explicit database column metadata overrides", () => {
+    const noteModel = defineEntityModel({
+      fields: {
+        id: field.string().remote("noteId"),
+        title: field.string(),
+      },
+      idField: "id",
+      name: "note",
+    });
+
+    const entity = defineBackendAdapterEntity({
+      database: {
+        columns: [
+          {
+            columnName: "note_id",
+            nullable: false,
+            sqlType: "UUID",
+          },
+          {
+            columnName: "title",
+            nullable: false,
+            sqlType: "TEXT",
+          },
+        ],
+        primaryKey: "note_id",
+      },
+      model: noteModel,
+      tableName: "notes",
+    });
+
+    expect(entity.database).toEqual({
+      columns: [
+        {
+          columnName: "note_id",
+          nullable: false,
+          sqlType: "UUID",
+        },
+        {
+          columnName: "title",
+          nullable: false,
+          sqlType: "TEXT",
+        },
+      ],
+      primaryKey: "note_id",
+    });
+  });
+
   it("builds a versioned manifest and resolves adapter URLs", () => {
     const noteModel = defineEntityModel({
       fields: {
@@ -130,6 +202,18 @@ describe("backend adapter manifest", () => {
 
     expect(manifest.database.expectedSchema.entityTables).toEqual([
       {
+        columns: [
+          {
+            columnName: "id",
+            nullable: false,
+            sqlType: "TEXT",
+          },
+          {
+            columnName: "title",
+            nullable: false,
+            sqlType: "TEXT",
+          },
+        ],
         primaryKey: "id",
         tableName: "notes",
       },
@@ -186,7 +270,7 @@ describe("backend adapter manifest", () => {
       "users",
       "sessions",
     ]);
-    expect(serializeBackendAdapterManifest(manifest)).toContain('"version": 2');
+    expect(serializeBackendAdapterManifest(manifest)).toContain('"version": 3');
     expect(
       resolveBackendAdapterAuthUrls({
         manifest,
@@ -373,7 +457,14 @@ describe("backend adapter manifest", () => {
               tableName: "notes",
             },
           ],
-          entityTables: [{ primaryKey: "id", tableName: "notes" }],
+          entityTables: [{
+            columns: [
+              { columnName: "ciphertext", nullable: false, sqlType: "TEXT" },
+              { columnName: "id", nullable: false, sqlType: "TEXT" },
+            ],
+            primaryKey: "id",
+            tableName: "notes",
+          }],
         },
       }),
       { note: { defaultStrategyId: "aes-256-gcm" } },
@@ -481,7 +572,14 @@ describe("backend adapter manifest", () => {
               tableName: "notes",
             },
           ],
-          entityTables: [{ primaryKey: "id", tableName: "notes" }],
+          entityTables: [{
+            columns: [
+              { columnName: "id", nullable: false, sqlType: "TEXT" },
+              { columnName: "title", nullable: false, sqlType: "TEXT" },
+            ],
+            primaryKey: "id",
+            tableName: "notes",
+          }],
         },
       }),
       createFetchRestTransport({
@@ -550,7 +648,13 @@ describe("backend adapter manifest", () => {
               tableName: "notes",
             },
           ],
-          entityTables: [{ primaryKey: "id", tableName: "notes" }],
+          entityTables: [{
+            columns: [
+              { columnName: "id", nullable: false, sqlType: "TEXT" },
+            ],
+            primaryKey: "id",
+            tableName: "notes",
+          }],
         },
       }),
       { fetch: fetchMock },

@@ -243,6 +243,7 @@ describe("backend adapter manifest", () => {
       { defaultStrategyId: "aes-256-gcm" },
     );
 
+    expect(generated.cacheCollection).toBe("notes");
     expect(generated.name).toBe("note");
     expect(generated.idPath).toBe("id");
     expect(generated.fields).toEqual([
@@ -362,6 +363,7 @@ describe("backend adapter manifest", () => {
     );
 
     expect(Object.keys(schemas)).toEqual(["note"]);
+    expect(schemas.note!.cacheCollection).toBe("notes");
     expect(schemas.note!.fields[0]).toEqual({
       encrypted: true,
       entityPath: "content",

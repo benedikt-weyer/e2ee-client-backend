@@ -82,11 +82,7 @@ const restTransport = createFetchRestTransport({
 
 const auth = createRestAuthConfig(restTransport);
 
-const schemas = createEntitySchemas({
-  note: {
-    cacheCollection: "notes",
-  },
-});
+const schemas = createEntitySchemas();
 
 const adapters = createRestCrudAdapters(restTransport);
 

@@ -114,7 +114,7 @@ export function createEntitySchemaFromExpectedSchemaEntity(
   })) as ModelFields;
 
   return defineEntityModel({
-    ...(options.cacheCollection ? { cacheCollection: options.cacheCollection } : {}),
+    cacheCollection: options.cacheCollection ?? entity.tableName,
     ...(options.defaultStrategyId ? { defaultStrategyId: options.defaultStrategyId } : {}),
     fields,
     idField: entity.idPath,

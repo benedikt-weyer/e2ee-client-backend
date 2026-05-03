@@ -63,38 +63,23 @@ Each example below is self-contained and can be copied independently.
 import {
   E2eeBackendStorageStrategy,
   createE2eeBackend,
-  defineClientModel,
 } from "e2ee-client-backend";
 
 import {
-  createEntitySchemas,
   createRestAuthConfig,
-  createRestCrudAdapters,
+  createRestModels,
 } from "./generated/e2ee-client-bindings";
 
-const auth = createRestAuthConfig();
-
-const schemas = createEntitySchemas();
-
-const adapters = createRestCrudAdapters();
-
 const restBackend = createE2eeBackend({
-  auth,
-  models: {
-    notes: defineClientModel({
-      adapter: adapters.note,
-      schema: schemas.note,
-    }),
-  },
+  auth: createRestAuthConfig(),
+  models: createRestModels(),
   storage: E2eeBackendStorageStrategy.LocalStorage,
   storageKey: "my-app.e2ee.v1",
 });
 
 await restBackend.loginWithPassword("ops@example.com", "top-secret-password");
 
-const restNotes = restBackend.getClient("notes");
-
-await restNotes.create({
+await restBackend.getClient("notes").create({
   content: "Encrypted text",
   id: crypto.randomUUID(),
   title: "First note",

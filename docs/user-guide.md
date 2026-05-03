@@ -16,7 +16,7 @@ The user documentation is now split into focused subpages so the package can be 
 
 Prefer `E2eeBackend` for browser applications that want the package to manage password-derived key state, browser persistence, and context injection.
 
-For model definitions, prefer loading the generated schema file exported by `e2ee-backend-adapter`, building client schemas with `createEntitySchemasFromGeneratedSchemaFile(...)`, and deriving default REST CRUD adapters with `createRestCrudAdaptersFromGeneratedSchemaFile(...)` when the generated schema targets REST.
+For model definitions, prefer importing the generated TypeScript companion module exported by `e2ee-backend-adapter`. That module can provide typed auth helpers, entity schemas, and default REST CRUD adapters without handwritten `SessionUser` or entity aliases. Use the raw generated schema file only when you explicitly want the lower-level JSON-driven helpers.
 
 Use `defineEntityModel(...)` plus `createEntityClient(...)` directly when you want the same repository and model-building behavior without the stateful orchestration layer, or when you need client-only schema behavior that is not part of the generated contract.
 

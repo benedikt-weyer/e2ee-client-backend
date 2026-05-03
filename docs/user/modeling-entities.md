@@ -4,7 +4,7 @@
 
 `defineEntityModel(...)` sits above the raw repository schema interface and lets you describe a model in one place.
 
-Use it when you want a manual schema definition. For most app integrations, prefer the generated schema file exported by `e2ee-backend-adapter` and load it with `createEntitySchemasFromGeneratedSchemaFile(...)`.
+Use it when you want a manual schema definition. For most app integrations, prefer the generated TypeScript companion module exported by `e2ee-backend-adapter`; it can create typed entity schemas for you without rewriting model aliases by hand. Fall back to `createEntitySchemasFromGeneratedSchemaFile(...)` only when you explicitly want the lower-level JSON export.
 
 That model definition is used to derive:
 

@@ -14,7 +14,7 @@ Use it when you do not want to manually wire together:
 
 It sits above `defineEntityModel(...)` and `createEntityClient(...)` and gives you one long-lived stateful object for the frontend.
 
-Recommended default: pair `E2eeBackend` with the generated schema file exported by `e2ee-backend-adapter`, then construct client schemas with `createEntitySchemasFromGeneratedSchemaFile(...)` and default REST CRUD adapters with `createRestCrudAdaptersFromGeneratedSchemaFile(...)`.
+Recommended default: pair `E2eeBackend` with the generated TypeScript companion module exported by `e2ee-backend-adapter`, then import typed auth helpers, entity schemas, and REST CRUD adapters from that generated file.
 
 ## What It Manages
 
@@ -49,91 +49,45 @@ Each example below is self-contained and can be copied independently.
 
 ```ts
 import {
-  createEntitySchemasFromGeneratedSchemaFile,
-  createRestCrudAdaptersFromGeneratedSchemaFile,
-  type ClientModelDefinition,
-  E2eeEncryptionStrategy,
-  type E2eeBackend,
   E2eeBackendStorageStrategy,
-  type EncryptedFieldValue,
-  type EntitySchema,
-  type RestPasswordAuthConfig,
-  type RestTransport,
-  createAes256GcmStrategy,
   createE2eeBackend,
   createFetchRestTransport,
-  createRestPasswordAuthConfig,
-  createStrategyRegistry,
   defineClientModel,
 } from "e2ee-client-backend";
 
-const restTransport: RestTransport = createFetchRestTransport({
+import {
+  createEntitySchemas,
+  createRestAuthConfig,
+  createRestCrudAdapters,
+} from "./generated/e2ee-client-bindings";
+
+const restTransport = createFetchRestTransport({
   baseUrl: "/api",
   defaultHeaders: {
     accept: "application/json",
   },
 });
 
-type SessionUser = {
-  email: string;
-  id: string;
-};
+const auth = createRestAuthConfig(restTransport);
 
-const auth: RestPasswordAuthConfig<SessionUser> = createRestPasswordAuthConfig<SessionUser>({
-  transport: restTransport,
-});
-
-type NoteRemoteRecord = {
-  content: EncryptedFieldValue;
-  id: string;
-  title: string;
-};
-
-const generatedSchemaJson = await fetch("/expected-schema.json").then((response) => {
-  if (!response.ok) {
-    throw new Error("Failed to load generated schema file.");
-  }
-
-  return response.text();
-});
-
-const schemas = createEntitySchemasFromGeneratedSchemaFile(generatedSchemaJson, {
+const schemas = createEntitySchemas({
   note: {
     cacheCollection: "notes",
-    defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   },
 });
 
-const noteModel: EntitySchema<
-  { content: string; id: string; title: string },
-  NoteRemoteRecord,
-  string
-> = schemas.note as EntitySchema<
-  { content: string; id: string; title: string },
-  NoteRemoteRecord,
-  string
->;
+const adapters = createRestCrudAdapters(restTransport);
 
-const adapters = createRestCrudAdaptersFromGeneratedSchemaFile<NoteRemoteRecord, string>(
-  generatedSchemaJson,
-  restTransport,
-);
-
-const restBackend: E2eeBackend<
-  { notes: ClientModelDefinition<typeof noteModel> },
-  SessionUser
-> = createE2eeBackend({
+const restBackend = createE2eeBackend({
   auth,
-  defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
       adapter: adapters.note,
-      schema: noteModel,
+      schema: schemas.note,
     }),
   },
   storage: E2eeBackendStorageStrategy.LocalStorage,
   storageKey: "my-app.e2ee.v1",
-  strategies: createStrategyRegistry(createAes256GcmStrategy()),
 });
 
 await restBackend.loginWithPassword("ops@example.com", "top-secret-password");

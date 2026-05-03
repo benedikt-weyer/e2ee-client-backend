@@ -16,11 +16,13 @@ The user documentation is now split into focused subpages so the package can be 
 
 Prefer `E2eeBackend` for browser applications that want the package to manage password-derived key state, browser persistence, and context injection.
 
-Use `defineEntityModel(...)` plus `createEntityClient(...)` directly when you want the same repository and model-building behavior without the stateful orchestration layer.
+For model definitions, prefer loading the generated schema file exported by `e2ee-backend-adapter` and building client schemas with `createEntitySchemasFromGeneratedSchemaFile(...)`.
+
+Use `defineEntityModel(...)` plus `createEntityClient(...)` directly when you want the same repository and model-building behavior without the stateful orchestration layer, or when you need client-only schema behavior that is not part of the generated contract.
 
 That path gives you:
 
-- one place to declare local and remote field mapping
+- one place to consume backend-generated local and remote field mapping
 - runtime validation before encrypting and after decrypting
 - per-model repository generation from a single `models` object
 - an easy upgrade path to custom model-specific service surfaces or a higher-level root backend object
@@ -28,3 +30,5 @@ That path gives you:
 Reach for direct `createEntityRepository(...)` wiring only if you need lower-level control than the factory API allows.
 
 If your app also talks to third-party APIs with decrypted integration config, use `createExternalE2eeApiClient(...)` rather than the repository factory. That pattern is documented in [External Datasources](user/external-datasources.md).
+
+See the backend adapter docs for the schema export flow: <https://benedikt-weyer.github.io/e2ee-backend-adapter/>.

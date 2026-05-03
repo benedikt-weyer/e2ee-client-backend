@@ -4,11 +4,20 @@ Browser-first TypeScript client backend for end-to-end encrypted frontend data a
 
 ## Quick Start
 
-The intended entrypoint is `E2eeBackend` plus the model builder.
+The intended default entrypoint is `E2eeBackend` plus a generated schema file exported by `e2ee-backend-adapter`.
 
 If you want one stateful object to own password auth, browser storage, context resolution, model registration, and lazy client creation, use `E2eeBackend`. That higher-level API is documented in `docs/user/e2ee-backend.md`.
 
 Minimal GraphQL and REST `E2eeBackend` examples are documented in `docs/user/e2ee-backend.md` and `docs/user/getting-started.md`.
+
+Recommended default:
+
+- export `expected-schema.json` from `e2ee-backend-adapter`
+- load that file in the browser client
+- build entity schemas with `createEntitySchemasFromGeneratedSchemaFile(...)`
+- use handwritten `defineEntityModel(...)` only when you need custom client-only behavior that the generated schema cannot describe
+
+Backend adapter documentation for generating that file is available at <https://benedikt-weyer.github.io/e2ee-backend-adapter/>.
 
 Those examples show the full shape of:
 

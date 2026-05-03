@@ -12,7 +12,8 @@ The maintainer documentation is split into focused sections so package internals
 
 Keep these rules in mind when changing the package:
 
-- public consumer docs should lead with `defineEntityModel(...)`, `defineClientModel(...)`, and `createEntityClient(...)`
+- public consumer docs should lead with generated schema consumption plus `E2eeBackend`, `defineClientModel(...)`, and `createEntityClient(...)`
+- `defineEntityModel(...)` should stay documented as the manual or advanced path when the generated schema contract is insufficient
 - lower-level repository wiring should stay available, but documented as advanced usage
 - transport, crypto, auth, and UI-specific concerns should stay decoupled
 - every public API change should be reflected in docs and validated with build, typecheck, and tests

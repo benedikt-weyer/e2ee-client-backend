@@ -4,6 +4,8 @@
 
 The top-level `createEntityClient(...)` API should be the default for most applications.
 
+The generated schema file path should be the default for most applications. This page is for the cases where you deliberately do not want to consume the backend-generated schema contract.
+
 Use direct repository wiring only when you need lower-level control, such as:
 
 - manually choosing cache instances at a specific call site

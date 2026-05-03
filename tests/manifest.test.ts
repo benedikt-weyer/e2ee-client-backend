@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createBackendAdapterManifest,
   createEntitySchemaFromExpectedSchemaEntity,
+  createEntitySchemasFromGeneratedSchemaFile,
   createPasswordSessionAuthManifest,
   defineBackendAdapterEntity,
   resolveBackendAdapterAuthUrls,
@@ -224,7 +225,7 @@ describe("backend adapter manifest", () => {
     });
 
     const generated = createEntitySchemaFromExpectedSchemaEntity(
-      manifest.database.expectedSchema.entities[0],
+      manifest.database.expectedSchema.entities[0]!,
       { defaultStrategyId: "aes-256-gcm" },
     );
 
@@ -291,6 +292,55 @@ describe("backend adapter manifest", () => {
       ciphertext: "hello",
       id: "note-1",
       metadata: null,
+    });
+  });
+
+  it("builds client schemas from the generated schema file format", () => {
+    const schemas = createEntitySchemasFromGeneratedSchemaFile(
+      JSON.stringify({
+        expectedSchema: {
+          authTables: ["users", "sessions"],
+          entities: [
+            {
+              fields: [
+                {
+                  encrypted: true,
+                  entityPath: "content",
+                  entityType: "string",
+                  nullable: false,
+                  optional: false,
+                  remotePath: "ciphertext",
+                  remoteType: "string",
+                  strategyId: "aes-256-gcm",
+                },
+                {
+                  encrypted: false,
+                  entityPath: "id",
+                  entityType: "string",
+                  nullable: false,
+                  optional: false,
+                  remotePath: "id",
+                  remoteType: "string",
+                },
+              ],
+              idPath: "id",
+              name: "note",
+              primaryKey: "id",
+              tableName: "notes",
+            },
+          ],
+          entityTables: [{ primaryKey: "id", tableName: "notes" }],
+        },
+      }),
+      { note: { defaultStrategyId: "aes-256-gcm" } },
+    );
+
+    expect(Object.keys(schemas)).toEqual(["note"]);
+    expect(schemas.note!.fields[0]).toEqual({
+      encrypted: true,
+      entityPath: "content",
+      remotePath: "ciphertext",
+      strategyId: "aes-256-gcm",
     });
   });
 });

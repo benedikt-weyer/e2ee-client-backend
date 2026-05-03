@@ -4,6 +4,8 @@
 
 `defineEntityModel(...)` sits above the raw repository schema interface and lets you describe a model in one place.
 
+Use it when you want a manual schema definition. For most app integrations, prefer the generated schema file exported by `e2ee-backend-adapter` and load it with `createEntitySchemasFromGeneratedSchemaFile(...)`.
+
 That model definition is used to derive:
 
 - local entity validation
@@ -112,3 +114,5 @@ This keeps custom app workflows close to the model while reusing the repository 
 If you prefer package-provided shapes, helpers like `createIntegrationSchema()` and `createDashboardSchema()` are still available.
 
 Use them when you want a ready-made starting point instead of defining models from scratch.
+
+If you already generate `expected-schema.json` from `e2ee-backend-adapter`, prefer that generated file over both built-in schemas and handwritten `defineEntityModel(...)` definitions.

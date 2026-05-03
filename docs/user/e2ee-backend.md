@@ -14,6 +14,8 @@ Use it when you do not want to manually wire together:
 
 It sits above `defineEntityModel(...)` and `createEntityClient(...)` and gives you one long-lived stateful object for the frontend.
 
+Recommended default: pair `E2eeBackend` with the generated schema file exported by `e2ee-backend-adapter`, then construct client schemas with `createEntitySchemasFromGeneratedSchemaFile(...)`.
+
 ## What It Manages
 
 An `E2eeBackend` instance can manage these concerns together:
@@ -47,6 +49,7 @@ Each example below is self-contained and can be copied independently.
 
 ```ts
 import {
+  createEntitySchemasFromGeneratedSchemaFile,
   type ClientModelDefinition,
   E2eeEncryptionStrategy,
   type E2eeBackend,
@@ -62,8 +65,6 @@ import {
   createGraphqlTransport,
   createStrategyRegistry,
   defineClientModel,
-  defineEntityModel,
-  field,
 } from "e2ee-client-backend";
 
 // Reuse one transport for both auth and note CRUD operations.
@@ -177,22 +178,31 @@ type NoteRemoteRecord = {
   title: string;
 };
 
-// This model defines which fields are encrypted locally before they are sent.
-// The field list comes from your app's domain model, not from the auth API.
+// Load the generated schema file produced by e2ee-backend-adapter.
+const generatedSchemaJson = await fetch("/expected-schema.json").then((response) => {
+  if (!response.ok) {
+    throw new Error("Failed to load generated schema file.");
+  }
+
+  return response.text();
+});
+
+const schemas = createEntitySchemasFromGeneratedSchemaFile(generatedSchemaJson, {
+  note: {
+    cacheCollection: "notes",
+    defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
+  },
+});
+
 const noteModel: EntitySchema<
   { content: string; id: string; title: string },
   NoteRemoteRecord,
   string
-> = defineEntityModel({
-  cacheCollection: "notes",
-  fields: {
-    id: field.string(),
-    title: field.string(),
-    content: field.string().encrypted(),
-  },
-  idField: "id",
-  name: "note",
-});
+> = schemas.note as EntitySchema<
+  { content: string; id: string; title: string },
+  NoteRemoteRecord,
+  string
+>;
 
 // This CRUD adapter maps repository operations to your note queries and mutations.
 // Get these operation names and payload shapes from your GraphQL schema.

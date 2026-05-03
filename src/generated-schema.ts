@@ -6,13 +6,28 @@ import type {
   BackendAdapterSchemaType,
 } from "./manifest";
 import type { EntitySchema } from "./repositories/entity-repository";
-import { defineEntityModel, field } from "./schema-builder";
+import {
+  defineEntityModel,
+  field,
+  type ModelFieldBuilder,
+  type ModelFields,
+} from "./schema-builder";
 
 type JsonObject = Record<string, unknown>;
 
 export interface CreateGeneratedEntitySchemaOptions {
   cacheCollection?: string;
   defaultStrategyId?: EncryptionAlgorithmId;
+}
+
+export interface BackendAdapterGeneratedSchemaFile {
+  expectedSchema: BackendAdapterExpectedSchemaManifest;
+}
+
+export function parseGeneratedSchemaFile(
+  json: string,
+): BackendAdapterGeneratedSchemaFile {
+  return JSON.parse(json) as BackendAdapterGeneratedSchemaFile;
 }
 
 function schemaForType(type: BackendAdapterSchemaType): z.ZodTypeAny {
@@ -40,10 +55,12 @@ export function createEntitySchemaFromExpectedSchemaEntity(
   const fields = Object.fromEntries(entity.fields.map((fieldManifest) => {
     const entitySchema = schemaForType(fieldManifest.entityType);
     const remoteSchema = schemaForType(fieldManifest.remoteType);
-    let fieldBuilder = field.custom({
-      entitySchema,
-      remoteSchema,
-    });
+    let fieldBuilder: ModelFieldBuilder<
+      unknown,
+      unknown,
+      string | undefined,
+      boolean
+    > = field.custom({ entitySchema, remoteSchema });
 
     if (fieldManifest.nullable) {
       fieldBuilder = fieldBuilder.nullable();
@@ -59,16 +76,18 @@ export function createEntitySchemaFromExpectedSchemaEntity(
 
     if (fieldManifest.encrypted) {
       fieldBuilder = fieldManifest.strategyId
-        ? fieldBuilder.encrypted({ strategyId: fieldManifest.strategyId })
+        ? fieldBuilder.encrypted({
+          strategyId: fieldManifest.strategyId as EncryptionAlgorithmId,
+        })
         : fieldBuilder.encrypted();
     }
 
     return [fieldManifest.entityPath, fieldBuilder];
-  }));
+  })) as ModelFields;
 
   return defineEntityModel({
-    cacheCollection: options.cacheCollection,
-    defaultStrategyId: options.defaultStrategyId,
+    ...(options.cacheCollection ? { cacheCollection: options.cacheCollection } : {}),
+    ...(options.defaultStrategyId ? { defaultStrategyId: options.defaultStrategyId } : {}),
     fields,
     idField: entity.idPath,
     name: entity.name,
@@ -83,4 +102,14 @@ export function createEntitySchemasFromExpectedSchema(
     entity.name,
     createEntitySchemaFromExpectedSchemaEntity(entity, optionsByEntity[entity.name]),
   ]));
+}
+
+export function createEntitySchemasFromGeneratedSchemaFile(
+  json: string,
+  optionsByEntity: Record<string, CreateGeneratedEntitySchemaOptions> = {},
+): Record<string, EntitySchema<JsonObject, JsonObject, string | number>> {
+  return createEntitySchemasFromExpectedSchema(
+    parseGeneratedSchemaFile(json).expectedSchema,
+    optionsByEntity,
+  );
 }

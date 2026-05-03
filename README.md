@@ -15,6 +15,7 @@ Recommended default:
 - export `expected-schema.json` from `e2ee-backend-adapter`
 - load that file in the browser client
 - build entity schemas with `createEntitySchemasFromGeneratedSchemaFile(...)`
+- build default REST CRUD adapters with `createRestCrudAdaptersFromGeneratedSchemaFile(...)` when the generated schema targets REST
 - use handwritten `defineEntityModel(...)` only when you need custom client-only behavior that the generated schema cannot describe
 
 Backend adapter documentation for generating that file is available at <https://benedikt-weyer.github.io/e2ee-backend-adapter/>.

@@ -60,13 +60,24 @@ export interface BackendAdapterDatabaseManifest {
   expectedSchema: BackendAdapterExpectedSchemaManifest;
 }
 
+export interface BackendAdapterExpectedSchemaApiManifest {
+  type: "rest";
+}
+
 export interface BackendAdapterExpectedSchemaManifest {
+  api: BackendAdapterExpectedSchemaApiManifest;
   authTables: string[];
   entities: BackendAdapterExpectedSchemaEntityManifest[];
   entityTables: BackendAdapterExpectedEntityTableManifest[];
 }
 
+export interface BackendAdapterExpectedSchemaEntityApiManifest {
+  rest: BackendAdapterEntityRestManifest;
+  type: "rest";
+}
+
 export interface BackendAdapterExpectedSchemaEntityManifest {
+  api: BackendAdapterExpectedSchemaEntityApiManifest;
   fields: BackendAdapterEntityFieldManifest[];
   idPath: string;
   name: string;
@@ -263,6 +274,10 @@ function createExpectedSchemaEntityManifest(
   entity: BackendAdapterEntityManifest,
 ): BackendAdapterExpectedSchemaEntityManifest {
   return {
+    api: {
+      rest: { ...entity.rest },
+      type: "rest",
+    },
     fields: entity.fields.map((field) => ({ ...field })),
     idPath: entity.idPath,
     name: entity.name,
@@ -342,6 +357,7 @@ export function createBackendAdapterManifest(
     database: {
       engine: options.database?.engine ?? "postgres",
       expectedSchema: {
+        api: options.database?.expectedSchema?.api ?? { type: "rest" },
         authTables: options.database?.expectedSchema?.authTables ?? [
           "users",
           "sessions",

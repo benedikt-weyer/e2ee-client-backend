@@ -14,7 +14,7 @@ Use it when you do not want to manually wire together:
 
 It sits above `defineEntityModel(...)` and `createEntityClient(...)` and gives you one long-lived stateful object for the frontend.
 
-Recommended default: pair `E2eeBackend` with the generated schema file exported by `e2ee-backend-adapter`, then construct client schemas with `createEntitySchemasFromGeneratedSchemaFile(...)`.
+Recommended default: pair `E2eeBackend` with the generated schema file exported by `e2ee-backend-adapter`, then construct client schemas with `createEntitySchemasFromGeneratedSchemaFile(...)` and default REST CRUD adapters with `createRestCrudAdaptersFromGeneratedSchemaFile(...)`.
 
 ## What It Manages
 
@@ -50,6 +50,7 @@ Each example below is self-contained and can be copied independently.
 ```ts
 import {
   createEntitySchemasFromGeneratedSchemaFile,
+  createRestCrudAdaptersFromGeneratedSchemaFile,
   type ClientModelDefinition,
   E2eeEncryptionStrategy,
   type E2eeBackend,
@@ -58,7 +59,6 @@ import {
   type EntitySchema,
   type RestPasswordAuthConfig,
   type RestTransport,
-  RestCrudAdapter,
   createAes256GcmStrategy,
   createE2eeBackend,
   createFetchRestTransport,
@@ -114,13 +114,10 @@ const noteModel: EntitySchema<
   string
 >;
 
-const restAdapter: RestCrudAdapter<NoteRemoteRecord, string> = new RestCrudAdapter<NoteRemoteRecord, string>(restTransport, {
-  create: { path: "/notes" },
-  delete: { path: (id) => `/notes/${id}` },
-  getById: { path: (id) => `/notes/${id}` },
-  list: { path: "/notes" },
-  update: { path: (id) => `/notes/${id}` },
-});
+const adapters = createRestCrudAdaptersFromGeneratedSchemaFile<NoteRemoteRecord, string>(
+  generatedSchemaJson,
+  restTransport,
+);
 
 const restBackend: E2eeBackend<
   { notes: ClientModelDefinition<typeof noteModel> },
@@ -130,7 +127,7 @@ const restBackend: E2eeBackend<
   defaultStrategyId: E2eeEncryptionStrategy.Aes256Gcm,
   models: {
     notes: defineClientModel({
-      adapter: restAdapter,
+      adapter: adapters.note,
       schema: noteModel,
     }),
   },

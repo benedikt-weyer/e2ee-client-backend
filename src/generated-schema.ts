@@ -1,10 +1,13 @@
 import { z } from "zod";
 import type { EncryptionAlgorithmId } from "./crypto/types";
 import type {
+  BackendAdapterExpectedSchemaEntityApiManifest,
   BackendAdapterExpectedSchemaEntityManifest,
   BackendAdapterExpectedSchemaManifest,
   BackendAdapterSchemaType,
 } from "./manifest";
+import type { RestTransport } from "./adapters/contracts";
+import { RestCrudAdapter } from "./adapters/rest";
 import type { EntitySchema } from "./repositories/entity-repository";
 import {
   defineEntityModel,
@@ -14,6 +17,31 @@ import {
 } from "./schema-builder";
 
 type JsonObject = Record<string, unknown>;
+
+function normalizeBasePath(basePath: string): string {
+  if (basePath === "/") {
+    return "/";
+  }
+
+  return basePath.endsWith("/") ? basePath.slice(0, -1) : basePath;
+}
+
+function resolveEntityItemPath(basePath: string, id: string | number): string {
+  const normalizedBasePath = normalizeBasePath(basePath);
+
+  return `${normalizedBasePath}/${encodeURIComponent(String(id))}`;
+}
+
+function getEntityRestApi(
+  entity: BackendAdapterExpectedSchemaEntityManifest,
+): BackendAdapterExpectedSchemaEntityApiManifest["rest"] {
+  const api = entity.api;
+  if (!api || api.type !== "rest") {
+    throw new Error(`Generated schema entity "${entity.name}" does not define REST API metadata.`);
+  }
+
+  return api.rest;
+}
 
 export interface CreateGeneratedEntitySchemaOptions {
   cacheCollection?: string;
@@ -111,5 +139,60 @@ export function createEntitySchemasFromGeneratedSchemaFile(
   return createEntitySchemasFromExpectedSchema(
     parseGeneratedSchemaFile(json).expectedSchema,
     optionsByEntity,
+  );
+}
+
+export function createRestCrudAdapterFromExpectedSchemaEntity<
+  TRemote = JsonObject,
+  TId extends string | number = string | number,
+>(
+  entity: BackendAdapterExpectedSchemaEntityManifest,
+  transport: RestTransport,
+): RestCrudAdapter<TRemote, TId> {
+  const rest = getEntityRestApi(entity);
+  const basePath = normalizeBasePath(rest.basePath);
+
+  return new RestCrudAdapter<TRemote, TId>(transport, {
+    ...(rest.allowCreate ? { create: { path: basePath } } : {}),
+    ...(rest.allowDelete
+      ? { delete: { path: (id: TId) => resolveEntityItemPath(basePath, id) } }
+      : {}),
+    ...(rest.allowGetById
+      ? { getById: { path: (id: TId) => resolveEntityItemPath(basePath, id) } }
+      : {}),
+    ...(rest.allowList ? { list: { path: basePath } } : {}),
+    ...(rest.allowUpdate
+      ? { update: { path: (id: TId) => resolveEntityItemPath(basePath, id) } }
+      : {}),
+  });
+}
+
+export function createRestCrudAdaptersFromExpectedSchema<
+  TRemote = JsonObject,
+  TId extends string | number = string | number,
+>(
+  schema: BackendAdapterExpectedSchemaManifest,
+  transport: RestTransport,
+): Record<string, RestCrudAdapter<TRemote, TId>> {
+  if (schema.api?.type !== "rest") {
+    throw new Error("Generated schema file does not declare REST API support.");
+  }
+
+  return Object.fromEntries(schema.entities.map((entity) => [
+    entity.name,
+    createRestCrudAdapterFromExpectedSchemaEntity<TRemote, TId>(entity, transport),
+  ]));
+}
+
+export function createRestCrudAdaptersFromGeneratedSchemaFile<
+  TRemote = JsonObject,
+  TId extends string | number = string | number,
+>(
+  json: string,
+  transport: RestTransport,
+): Record<string, RestCrudAdapter<TRemote, TId>> {
+  return createRestCrudAdaptersFromExpectedSchema<TRemote, TId>(
+    parseGeneratedSchemaFile(json).expectedSchema,
+    transport,
   );
 }

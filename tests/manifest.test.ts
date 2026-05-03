@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   createBackendAdapterManifest,
   createEntitySchemaFromExpectedSchemaEntity,
   createEntitySchemasFromGeneratedSchemaFile,
+  createFetchRestTransport,
   createPasswordSessionAuthManifest,
+  createRestCrudAdaptersFromGeneratedSchemaFile,
   defineBackendAdapterEntity,
   resolveBackendAdapterAuthUrls,
   resolveBackendAdapterEntityUrl,
@@ -133,6 +135,17 @@ describe("backend adapter manifest", () => {
     ]);
     expect(manifest.database.expectedSchema.entities).toEqual([
       {
+        api: {
+          rest: {
+            allowCreate: true,
+            allowDelete: true,
+            allowGetById: true,
+            allowList: true,
+            allowUpdate: true,
+            basePath: "/entities/note",
+          },
+          type: "rest",
+        },
         fields: [
           {
             encrypted: false,
@@ -159,6 +172,7 @@ describe("backend adapter manifest", () => {
         tableName: "notes",
       },
     ]);
+    expect(manifest.database.expectedSchema.api).toEqual({ type: "rest" });
     expect(manifest.database.expectedSchema.authTables).toEqual([
       "users",
       "sessions",
@@ -299,9 +313,21 @@ describe("backend adapter manifest", () => {
     const schemas = createEntitySchemasFromGeneratedSchemaFile(
       JSON.stringify({
         expectedSchema: {
+          api: { type: "rest" },
           authTables: ["users", "sessions"],
           entities: [
             {
+              api: {
+                rest: {
+                  allowCreate: true,
+                  allowDelete: true,
+                  allowGetById: true,
+                  allowList: true,
+                  allowUpdate: true,
+                  basePath: "/notes",
+                },
+                type: "rest",
+              },
               fields: [
                 {
                   encrypted: true,
@@ -342,5 +368,107 @@ describe("backend adapter manifest", () => {
       remotePath: "ciphertext",
       strategyId: "aes-256-gcm",
     });
+  });
+
+  it("builds REST CRUD adapters from the generated schema file format", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: URL, init?: RequestInit) => {
+      const pathname = url.pathname;
+      const method = init?.method ?? "GET";
+
+      if (method === "GET" && pathname === "/api/notes") {
+        return new Response(JSON.stringify([{ id: "note-1", title: "First" }]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (method === "GET" && pathname === "/api/notes/note-1") {
+        return new Response(JSON.stringify({ id: "note-1", title: "First" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (method === "POST" && pathname === "/api/notes") {
+        return new Response(init?.body ?? JSON.stringify({}), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (method === "PUT" && pathname === "/api/notes/note-1") {
+        return new Response(init?.body ?? JSON.stringify({}), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (method === "DELETE" && pathname === "/api/notes/note-1") {
+        return new Response(null, { status: 204 });
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    const adapters = createRestCrudAdaptersFromGeneratedSchemaFile(
+      JSON.stringify({
+        expectedSchema: {
+          api: { type: "rest" },
+          authTables: ["users", "sessions"],
+          entities: [
+            {
+              api: {
+                rest: {
+                  allowCreate: true,
+                  allowDelete: true,
+                  allowGetById: true,
+                  allowList: true,
+                  allowUpdate: true,
+                  basePath: "/notes",
+                },
+                type: "rest",
+              },
+              fields: [
+                {
+                  encrypted: false,
+                  entityPath: "id",
+                  entityType: "string",
+                  nullable: false,
+                  optional: false,
+                  remotePath: "id",
+                  remoteType: "string",
+                },
+                {
+                  encrypted: false,
+                  entityPath: "title",
+                  entityType: "string",
+                  nullable: false,
+                  optional: false,
+                  remotePath: "title",
+                  remoteType: "string",
+                },
+              ],
+              idPath: "id",
+              name: "note",
+              primaryKey: "id",
+              tableName: "notes",
+            },
+          ],
+          entityTables: [{ primaryKey: "id", tableName: "notes" }],
+        },
+      }),
+      createFetchRestTransport({
+        baseUrl: "https://api.example.test/api",
+        fetch: fetchMock,
+      }),
+    );
+
+    const notes = adapters.note!;
+
+    await expect(notes.list()).resolves.toEqual([{ id: "note-1", title: "First" }]);
+    await expect(notes.getById("note-1")).resolves.toEqual({ id: "note-1", title: "First" });
+    await expect(notes.create({ id: "note-1", title: "First" })).resolves.toEqual({ id: "note-1", title: "First" });
+    await expect(notes.update("note-1", { id: "note-1", title: "Updated" })).resolves.toEqual({ id: "note-1", title: "Updated" });
+    await expect(notes.delete("note-1")).resolves.toBeUndefined();
   });
 });

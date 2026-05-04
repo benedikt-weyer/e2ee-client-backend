@@ -4,7 +4,7 @@ import type {
   ModelFields,
 } from "./schema-builder";
 
-export const BACKEND_ADAPTER_MANIFEST_VERSION = 3 as const;
+export const BACKEND_ADAPTER_MANIFEST_VERSION = 4 as const;
 
 export type BackendAdapterManifestVersion =
   typeof BACKEND_ADAPTER_MANIFEST_VERSION;
@@ -60,15 +60,25 @@ export interface BackendAdapterDatabaseManifest {
   expectedSchema: BackendAdapterExpectedSchemaManifest;
 }
 
+export interface BackendAdapterExpectedSchemaGraphqlApiManifest {
+  defaultHeaders?: Record<string, string>;
+  endpointPath: string;
+}
+
 export interface BackendAdapterExpectedSchemaRestApiManifest {
   baseUrl: string;
   defaultHeaders?: Record<string, string>;
 }
 
-export interface BackendAdapterExpectedSchemaApiManifest {
-  rest: BackendAdapterExpectedSchemaRestApiManifest;
-  type: "rest";
-}
+export type BackendAdapterExpectedSchemaApiManifest =
+  | {
+      graphql: BackendAdapterExpectedSchemaGraphqlApiManifest;
+      type: "graphql";
+    }
+  | {
+      rest: BackendAdapterExpectedSchemaRestApiManifest;
+      type: "rest";
+    };
 
 export interface BackendAdapterExpectedSchemaManifest {
   api: BackendAdapterExpectedSchemaApiManifest;
@@ -83,10 +93,28 @@ export interface BackendAdapterExpectedEntityColumnManifest {
   sqlType: string;
 }
 
-export interface BackendAdapterExpectedSchemaEntityApiManifest {
-  rest: BackendAdapterEntityRestManifest;
-  type: "rest";
+export interface BackendAdapterEntityGraphqlManifest {
+  allowCreate: boolean;
+  allowDelete: boolean;
+  allowGetById: boolean;
+  allowList: boolean;
+  allowUpdate: boolean;
+  createMutation: string;
+  deleteMutation: string;
+  getByIdQuery: string;
+  listQuery: string;
+  updateMutation: string;
 }
+
+export type BackendAdapterExpectedSchemaEntityApiManifest =
+  | {
+      graphql: BackendAdapterEntityGraphqlManifest;
+      type: "graphql";
+    }
+  | {
+      rest: BackendAdapterEntityRestManifest;
+      type: "rest";
+    };
 
 export interface BackendAdapterExpectedSchemaEntityManifest {
   api: BackendAdapterExpectedSchemaEntityApiManifest;
@@ -111,6 +139,7 @@ export interface BackendAdapterEntityDatabaseManifest {
 export interface BackendAdapterEntityManifest {
   database: BackendAdapterEntityDatabaseManifest;
   fields: BackendAdapterEntityFieldManifest[];
+  graphql: BackendAdapterEntityGraphqlManifest;
   idPath: string;
   name: string;
   rest: BackendAdapterEntityRestManifest;
@@ -152,6 +181,7 @@ export interface DefineBackendAdapterEntityOptions<
   TModel extends BackendAdapterCompatibleModel<ModelFields>,
 > {
   database?: Partial<BackendAdapterEntityDatabaseManifest>;
+  graphql?: Partial<BackendAdapterEntityGraphqlManifest>;
   model: TModel;
   rest?: Partial<Omit<BackendAdapterEntityRestManifest, "basePath">> & {
     basePath?: string;
@@ -161,7 +191,7 @@ export interface DefineBackendAdapterEntityOptions<
 
 export interface CreateBackendAdapterManifestOptions {
   auth: BackendAdapterAuthManifest;
-  database?: Partial<BackendAdapterDatabaseManifest> & {
+  database?: Omit<Partial<BackendAdapterDatabaseManifest>, "expectedSchema"> & {
     expectedSchema?: Partial<BackendAdapterExpectedSchemaManifest>;
   };
   entities: BackendAdapterEntityManifest[];
@@ -195,6 +225,27 @@ function normalizePathSegment(value: string): string {
     .replaceAll(/[^a-zA-Z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "")
     .toLowerCase();
+}
+
+function normalizeGraphqlIdentifier(
+  value: string,
+  capitalizeFirst = false,
+): string {
+  const segments = normalizePathSegment(value)
+    .split("-")
+    .filter(Boolean);
+
+  if (!segments.length) {
+    return capitalizeFirst ? "Entity" : "entity";
+  }
+
+  return segments.map((segment, index) => {
+    if (index === 0 && !capitalizeFirst) {
+      return segment;
+    }
+
+    return `${segment[0]!.toUpperCase()}${segment.slice(1)}`;
+  }).join("");
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): {
@@ -292,12 +343,18 @@ function createEntityFieldManifest(
 
 function createExpectedSchemaEntityManifest(
   entity: BackendAdapterEntityManifest,
+  apiType: BackendAdapterExpectedSchemaApiManifest["type"],
 ): BackendAdapterExpectedSchemaEntityManifest {
   return {
-    api: {
-      rest: { ...entity.rest },
-      type: "rest",
-    },
+    api: apiType === "graphql"
+      ? {
+          graphql: { ...entity.graphql },
+          type: "graphql",
+        }
+      : {
+          rest: { ...entity.rest },
+          type: "rest",
+        },
     fields: entity.fields.map((field) => ({ ...field })),
     idPath: entity.idPath,
     name: entity.name,
@@ -382,11 +439,39 @@ function createEntityDatabaseManifest(args: {
   };
 }
 
+function createDefaultEntityGraphqlManifest(args: {
+  allowCreate: boolean;
+  allowDelete: boolean;
+  allowGetById: boolean;
+  allowList: boolean;
+  allowUpdate: boolean;
+  entityName: string;
+  tableName: string;
+}): BackendAdapterEntityGraphqlManifest {
+  const singularName = normalizeGraphqlIdentifier(args.entityName);
+  const entityPascalName = normalizeGraphqlIdentifier(args.entityName, true);
+  const pluralName = normalizeGraphqlIdentifier(args.tableName);
+
+  return {
+    allowCreate: args.allowCreate,
+    allowDelete: args.allowDelete,
+    allowGetById: args.allowGetById,
+    allowList: args.allowList,
+    allowUpdate: args.allowUpdate,
+    createMutation: `create${entityPascalName}`,
+    deleteMutation: `delete${entityPascalName}`,
+    getByIdQuery: singularName,
+    listQuery: pluralName,
+    updateMutation: `update${entityPascalName}`,
+  };
+}
+
 export function defineBackendAdapterEntity<
   TModel extends BackendAdapterCompatibleModel<ModelFields>,
 >(options: DefineBackendAdapterEntityOptions<TModel>): BackendAdapterEntityManifest {
   const { model } = options;
   const idPath = model.idPath ?? "id";
+  const tableName = options.tableName ?? `${normalizePathSegment(model.name)}s`;
   const basePath = assertAbsolutePath(
     options.rest?.basePath ?? `/entities/${normalizePathSegment(model.name)}`,
     `REST base path for entity "${model.name}"`,
@@ -409,6 +494,15 @@ export function defineBackendAdapterEntity<
       ? { primaryKey: options.database.primaryKey }
       : {}),
   });
+  const graphqlDefaults = createDefaultEntityGraphqlManifest({
+    allowCreate: options.graphql?.allowCreate ?? options.rest?.allowCreate ?? true,
+    allowDelete: options.graphql?.allowDelete ?? options.rest?.allowDelete ?? true,
+    allowGetById: options.graphql?.allowGetById ?? options.rest?.allowGetById ?? true,
+    allowList: options.graphql?.allowList ?? options.rest?.allowList ?? true,
+    allowUpdate: options.graphql?.allowUpdate ?? options.rest?.allowUpdate ?? true,
+    entityName: model.name,
+    tableName,
+  });
 
   return {
     database: {
@@ -416,6 +510,18 @@ export function defineBackendAdapterEntity<
       primaryKey: database.primaryKey,
     },
     fields,
+    graphql: {
+      allowCreate: options.graphql?.allowCreate ?? graphqlDefaults.allowCreate,
+      allowDelete: options.graphql?.allowDelete ?? graphqlDefaults.allowDelete,
+      allowGetById: options.graphql?.allowGetById ?? graphqlDefaults.allowGetById,
+      allowList: options.graphql?.allowList ?? graphqlDefaults.allowList,
+      allowUpdate: options.graphql?.allowUpdate ?? graphqlDefaults.allowUpdate,
+      createMutation: options.graphql?.createMutation ?? graphqlDefaults.createMutation,
+      deleteMutation: options.graphql?.deleteMutation ?? graphqlDefaults.deleteMutation,
+      getByIdQuery: options.graphql?.getByIdQuery ?? graphqlDefaults.getByIdQuery,
+      listQuery: options.graphql?.listQuery ?? graphqlDefaults.listQuery,
+      updateMutation: options.graphql?.updateMutation ?? graphqlDefaults.updateMutation,
+    },
     idPath,
     name: model.name,
     rest: {
@@ -426,7 +532,7 @@ export function defineBackendAdapterEntity<
       allowUpdate: options.rest?.allowUpdate ?? true,
       basePath,
     },
-    tableName: options.tableName ?? `${normalizePathSegment(model.name)}s`,
+    tableName,
   };
 }
 
@@ -461,25 +567,45 @@ export function createBackendAdapterManifest(
     throw new Error("Backend adapter manifest requires at least one entity.");
   }
 
+  const expectedSchemaApi = options.database?.expectedSchema?.api ?? {
+    rest: {
+      baseUrl: "/api",
+      defaultHeaders: {
+        accept: "application/json",
+      },
+    },
+    type: "rest",
+  } satisfies BackendAdapterExpectedSchemaApiManifest;
   const expectedSchemaEntities =
     options.database?.expectedSchema?.entities ??
-    options.entities.map((entity) => createExpectedSchemaEntityManifest(entity));
-  const expectedSchemaApi = options.database?.expectedSchema?.api;
+    options.entities.map((entity) =>
+      createExpectedSchemaEntityManifest(entity, expectedSchemaApi.type)
+    );
 
   const manifest: BackendAdapterManifest = {
     auth: options.auth,
     database: {
       engine: options.database?.engine ?? "postgres",
       expectedSchema: {
-        api: {
-          rest: {
-            baseUrl: expectedSchemaApi?.rest.baseUrl ?? "/api",
-            ...(expectedSchemaApi?.rest.defaultHeaders
-              ? { defaultHeaders: expectedSchemaApi.rest.defaultHeaders }
-              : { defaultHeaders: { accept: "application/json" } }),
-          },
-          type: "rest",
-        },
+        api: expectedSchemaApi.type === "graphql"
+          ? {
+              graphql: {
+                endpointPath: expectedSchemaApi.graphql.endpointPath,
+                ...(expectedSchemaApi.graphql.defaultHeaders
+                  ? { defaultHeaders: expectedSchemaApi.graphql.defaultHeaders }
+                  : { defaultHeaders: { accept: "application/json" } }),
+              },
+              type: "graphql",
+            }
+          : {
+              rest: {
+                baseUrl: expectedSchemaApi.rest.baseUrl,
+                ...(expectedSchemaApi.rest.defaultHeaders
+                  ? { defaultHeaders: expectedSchemaApi.rest.defaultHeaders }
+                  : { defaultHeaders: { accept: "application/json" } }),
+              },
+              type: "rest",
+            },
         authTables: options.database?.expectedSchema?.authTables ?? [
           "users",
           "sessions",

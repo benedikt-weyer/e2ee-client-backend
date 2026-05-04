@@ -14,7 +14,7 @@ Use it when you do not want to manually wire together:
 
 It sits above `defineEntityModel(...)` and `createEntityClient(...)` and gives you one long-lived stateful object for the frontend.
 
-Recommended default: pair `E2eeBackend` with the generated TypeScript companion module exported by `e2ee-backend-adapter`, then import typed auth helpers, entity schemas, and REST CRUD adapters from that generated file.
+Recommended default: pair `E2eeBackend` with the generated TypeScript companion module exported by `e2ee-backend-adapter`, then import typed auth helpers, entity schemas, and REST or GraphQL CRUD adapters from that generated file.
 
 ## What It Manages
 
@@ -73,6 +73,37 @@ await restBackend.getClient("notes").create({
   title: "First note",
 });
 ```
+
+### Minimal GraphQL Example With Adapter-Generated Schema
+
+```ts
+import {
+  E2eeBackendStorageStrategy,
+  createE2eeBackend,
+} from "e2ee-client-backend";
+
+import {
+  createGraphqlAuthConfig,
+  createGraphqlModels,
+} from "./generated/e2ee-client-bindings";
+
+const graphqlBackend = createE2eeBackend({
+  auth: createGraphqlAuthConfig(),
+  models: createGraphqlModels(),
+  storage: E2eeBackendStorageStrategy.LocalStorage,
+  storageKey: "my-app.e2ee.v1",
+});
+
+await graphqlBackend.loginWithPassword("ops@example.com", "top-secret-password");
+
+await graphqlBackend.getClient("notes").create({
+  content: "Encrypted text",
+  id: crypto.randomUUID(),
+  title: "First note",
+});
+```
+
+This generated GraphQL path assumes the exported schema uses the built-in naming conventions for auth and CRUD operations: `kdfSalt`, `login`, `logout`, `refreshSession`, `registerBegin`, `registerComplete`, plus entity operations such as `note`, `notes`, `createNote`, `updateNote`, and `deleteNote`.
 
 ### Minimal REST Example
 

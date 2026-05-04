@@ -4,7 +4,11 @@ import {
   createBackendAdapterManifest,
   createEntitySchemaFromExpectedSchemaEntity,
   createEntitySchemasFromGeneratedSchemaFile,
+  createGraphqlCrudAdaptersFromGeneratedSchemaFile,
+  createGraphqlPasswordAuthConfigFromExpectedSchema,
+  createGraphqlTransportFromGeneratedSchemaFile,
   createFetchRestTransport,
+  createPasswordAuthAdapterFromConfig,
   createPasswordSessionAuthManifest,
   createRestCrudAdaptersFromGeneratedSchemaFile,
   createRestTransportFromGeneratedSchemaFile,
@@ -107,6 +111,18 @@ describe("backend adapter manifest", () => {
           remoteType: "string",
         },
       ],
+      graphql: {
+        allowCreate: true,
+        allowDelete: true,
+        allowGetById: true,
+        allowList: true,
+        allowUpdate: true,
+        createMutation: "createNote",
+        deleteMutation: "deleteNote",
+        getByIdQuery: "note",
+        listQuery: "notes",
+        updateMutation: "updateNote",
+      },
       idPath: "id",
       name: "note",
       rest: {
@@ -270,7 +286,7 @@ describe("backend adapter manifest", () => {
       "users",
       "sessions",
     ]);
-    expect(serializeBackendAdapterManifest(manifest)).toContain('"version": 3');
+    expect(serializeBackendAdapterManifest(manifest)).toContain('"version": 4');
     expect(
       resolveBackendAdapterAuthUrls({
         manifest,
@@ -401,6 +417,73 @@ describe("backend adapter manifest", () => {
       id: "note-1",
       metadata: null,
     });
+  });
+
+  it("builds a graphql generated schema manifest when graphql metadata is requested", () => {
+    const noteModel = defineEntityModel({
+      fields: {
+        id: field.string(),
+        title: field.string(),
+      },
+      idField: "id",
+      name: "note",
+    });
+
+    const manifest = createBackendAdapterManifest({
+      auth: createPasswordSessionAuthManifest({
+        paths: {
+          getKdfSalt: "/auth/kdf-salt",
+          login: "/auth/login",
+          logout: "/auth/logout",
+          refresh: "/auth/refresh",
+          registerBegin: "/auth/register/begin",
+          registerComplete: "/auth/register/complete",
+        },
+        refreshDurationSeconds: 60 * 60 * 24 * 30,
+        sessionDurationSeconds: 60 * 60,
+      }),
+      database: {
+        expectedSchema: {
+          api: {
+            graphql: {
+              defaultHeaders: {
+                accept: "application/json",
+              },
+              endpointPath: "/graphql",
+            },
+            type: "graphql",
+          },
+        },
+      },
+      entities: [defineBackendAdapterEntity({ model: noteModel })],
+      name: "notes-service",
+    });
+
+    expect(manifest.database.expectedSchema.api).toEqual({
+      graphql: {
+        defaultHeaders: {
+          accept: "application/json",
+        },
+        endpointPath: "/graphql",
+      },
+      type: "graphql",
+    });
+    expect(manifest.database.expectedSchema.entities[0]?.api).toEqual({
+      graphql: {
+        allowCreate: true,
+        allowDelete: true,
+        allowGetById: true,
+        allowList: true,
+        allowUpdate: true,
+        createMutation: "createNote",
+        deleteMutation: "deleteNote",
+        getByIdQuery: "note",
+        listQuery: "notes",
+        updateMutation: "updateNote",
+      },
+      type: "graphql",
+    });
+    expect(serializeBackendAdapterManifest(manifest)).toContain('"version": 4');
   });
 
   it("builds client schemas from the generated schema file format", () => {
@@ -673,6 +756,206 @@ describe("backend adapter manifest", () => {
         headers: new Headers({ accept: "application/json" }),
         method: "GET",
       },
+    );
+  });
+
+  it("builds GraphQL CRUD adapters, auth, and transport defaults from the generated schema file format", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const payload = JSON.parse(String(init?.body ?? "{}")) as {
+        query: string;
+        variables?: Record<string, unknown>;
+      };
+
+      if (payload.query.includes("query GetKdfSalt")) {
+        return new Response(JSON.stringify({ data: { kdfSalt: "salt-123" } }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (payload.query.includes("mutation Login")) {
+        return new Response(JSON.stringify({
+          data: {
+            login: {
+              message: null,
+              ok: true,
+              user: {
+                email: "a@example.test",
+                id: "user-1",
+              },
+            },
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (payload.query.includes("query ListNotes")) {
+        return new Response(JSON.stringify({
+          data: {
+            notes: [{ id: "note-1", title: "First" }],
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (payload.query.includes("query GetNoteById")) {
+        return new Response(JSON.stringify({
+          data: {
+            note: { id: "note-1", title: "First" },
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (payload.query.includes("mutation CreateNote")) {
+        return new Response(JSON.stringify({
+          data: {
+            createNote: payload.variables?.input,
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (payload.query.includes("mutation UpdateNote")) {
+        return new Response(JSON.stringify({
+          data: {
+            updateNote: payload.variables?.input,
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (payload.query.includes("mutation DeleteNote")) {
+        return new Response(JSON.stringify({
+          data: {
+            deleteNote: true,
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      throw new Error(`Unexpected GraphQL request to ${url}: ${payload.query}`);
+    });
+
+    const schemaJson = JSON.stringify({
+      expectedSchema: {
+        api: {
+          graphql: {
+            defaultHeaders: {
+              accept: "application/json",
+            },
+            endpointPath: "/graphql",
+          },
+          type: "graphql",
+        },
+        authTables: ["users", "sessions"],
+        entities: [
+          {
+            api: {
+              graphql: {
+                allowCreate: true,
+                allowDelete: true,
+                allowGetById: true,
+                allowList: true,
+                allowUpdate: true,
+                createMutation: "createNote",
+                deleteMutation: "deleteNote",
+                getByIdQuery: "note",
+                listQuery: "notes",
+                updateMutation: "updateNote",
+              },
+              type: "graphql",
+            },
+            fields: [
+              {
+                encrypted: false,
+                entityPath: "id",
+                entityType: "string",
+                nullable: false,
+                optional: false,
+                remotePath: "id",
+                remoteType: "string",
+              },
+              {
+                encrypted: false,
+                entityPath: "title",
+                entityType: "string",
+                nullable: false,
+                optional: false,
+                remotePath: "title",
+                remoteType: "string",
+              },
+            ],
+            idPath: "id",
+            name: "note",
+            primaryKey: "id",
+            tableName: "notes",
+          },
+        ],
+        entityTables: [{
+          columns: [
+            { columnName: "id", nullable: false, sqlType: "TEXT" },
+            { columnName: "title", nullable: false, sqlType: "TEXT" },
+          ],
+          primaryKey: "id",
+          tableName: "notes",
+        }],
+      },
+    });
+
+    const transport = createGraphqlTransportFromGeneratedSchemaFile(schemaJson, {
+      baseUrl: "https://api.example.test",
+      fetch: fetchMock,
+    });
+    const adapters = createGraphqlCrudAdaptersFromGeneratedSchemaFile(schemaJson, transport);
+    const auth = createGraphqlPasswordAuthConfigFromExpectedSchema(
+      JSON.parse(schemaJson).expectedSchema,
+      transport,
+    );
+    const authAdapter = createPasswordAuthAdapterFromConfig(auth);
+
+    await expect(authAdapter.getKdfSalt("a@example.test")).resolves.toBe("salt-123");
+    await expect(authAdapter.login("a@example.test", "hex")).resolves.toEqual({
+      message: null,
+      ok: true,
+      user: {
+        email: "a@example.test",
+        id: "user-1",
+      },
+    });
+
+    const notes = adapters.note!;
+    await expect(notes.list()).resolves.toEqual([{ id: "note-1", title: "First" }]);
+    await expect(notes.getById("note-1")).resolves.toEqual({ id: "note-1", title: "First" });
+    await expect(notes.create({ id: "note-2", title: "Created" })).resolves.toEqual({
+      id: "note-2",
+      title: "Created",
+    });
+    await expect(notes.update("note-1", { id: "note-1", title: "Updated" })).resolves.toEqual({
+      id: "note-1",
+      title: "Updated",
+    });
+    await expect(notes.delete("note-1")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.test/graphql",
+      expect.objectContaining({
+        headers: expect.any(Headers),
+        method: "POST",
+      }),
     );
   });
 });

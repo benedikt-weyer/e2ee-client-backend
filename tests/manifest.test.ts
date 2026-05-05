@@ -419,6 +419,74 @@ describe("backend adapter manifest", () => {
     });
   });
 
+  it("reconstructs typed encrypted object fields from generated schema metadata", () => {
+    const noteModel = defineEntityModel({
+      fields: {
+        config: field.json(z.unknown()).nullable().remote("configEnvelope").encrypted(),
+        id: field.string(),
+      },
+      idField: "id",
+      name: "note",
+    });
+
+    const manifest = createBackendAdapterManifest({
+      auth: createPasswordSessionAuthManifest({
+        paths: {
+          getKdfSalt: "/auth/kdf-salt",
+          login: "/auth/login",
+          logout: "/auth/logout",
+          refresh: "/auth/refresh",
+          registerBegin: "/auth/register/begin",
+          registerComplete: "/auth/register/complete",
+        },
+        refreshDurationSeconds: 60 * 60 * 24 * 30,
+        sessionDurationSeconds: 60 * 60,
+      }),
+      entities: [defineBackendAdapterEntity({ model: noteModel, tableName: "notes" })],
+      name: "notes-service",
+    });
+
+    manifest.database.expectedSchema.entities[0]!.fields[0]!.entitySchema = {
+      schema: {
+        additionalProperties: false,
+        properties: {
+          apiUrl: { schema: { type: "string" } },
+          authHash: { nullable: true, schema: { type: "string" } },
+          mode: { schema: { type: "enum", values: ["manual", "oauth"] } },
+        },
+        type: "object",
+      },
+    };
+
+    const generated = createEntitySchemaFromExpectedSchemaEntity(
+      manifest.database.expectedSchema.entities[0]!,
+    );
+
+    expect(generated.parseEntity?.({
+      config: {
+        apiUrl: "https://api.example.com",
+        authHash: null,
+        mode: "manual",
+      },
+      id: "note-1",
+    })).toEqual({
+      config: {
+        apiUrl: "https://api.example.com",
+        authHash: null,
+        mode: "manual",
+      },
+      id: "note-1",
+    });
+
+    expect(() => generated.parseEntity?.({
+      config: {
+        apiUrl: "https://api.example.com",
+        mode: "invalid",
+      },
+      id: "note-1",
+    })).toThrow();
+  });
+
   it("builds a graphql generated schema manifest when graphql metadata is requested", () => {
     const noteModel = defineEntityModel({
       fields: {

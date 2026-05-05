@@ -18,6 +18,59 @@ export type BackendAdapterSchemaType =
   | "string"
   | "unknown";
 
+export type BackendAdapterSchemaLiteral = boolean | number | string | null;
+
+export interface BackendAdapterSchemaNode {
+  nullable?: boolean;
+  optional?: boolean;
+  schema: BackendAdapterSchemaDescriptor;
+}
+
+export type BackendAdapterSchemaDescriptor =
+  | {
+      items: BackendAdapterSchemaNode;
+      type: "array";
+    }
+  | {
+      type: "boolean";
+    }
+  | {
+      discriminator: string;
+      options: BackendAdapterSchemaNode[];
+      type: "discriminatedUnion";
+    }
+  | {
+      type: "enum";
+      values: string[];
+    }
+  | {
+      type: "literal";
+      value: BackendAdapterSchemaLiteral;
+    }
+  | {
+      integer?: boolean;
+      type: "number";
+    }
+  | {
+      additionalProperties?: boolean | BackendAdapterSchemaNode;
+      properties?: Record<string, BackendAdapterSchemaNode>;
+      type: "object";
+    }
+  | {
+      type: "record";
+      values: BackendAdapterSchemaNode;
+    }
+  | {
+      type: "string";
+    }
+  | {
+      options: BackendAdapterSchemaNode[];
+      type: "union";
+    }
+  | {
+      type: "unknown";
+    };
+
 export interface BackendAdapterManifest {
   auth: BackendAdapterAuthManifest;
   database: BackendAdapterDatabaseManifest;
@@ -157,11 +210,13 @@ export interface BackendAdapterEntityRestManifest {
 
 export interface BackendAdapterEntityFieldManifest {
   encrypted: boolean;
+  entitySchema?: BackendAdapterSchemaNode;
   entityPath: string;
   entityType: BackendAdapterSchemaType;
   nullable: boolean;
   optional: boolean;
   remotePath: string;
+  remoteSchema?: BackendAdapterSchemaNode;
   remoteType: BackendAdapterSchemaType;
   strategyId?: string;
 }

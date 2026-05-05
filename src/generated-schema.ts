@@ -3,6 +3,8 @@ import type { EncryptionAlgorithmId } from "./crypto/types";
 import type {
   BackendAdapterEntityGraphqlManifest,
   BackendAdapterEntityRestManifest,
+  BackendAdapterSchemaDescriptor,
+  BackendAdapterSchemaNode,
   BackendAdapterExpectedSchemaEntityApiManifest,
   BackendAdapterExpectedSchemaEntityManifest,
   BackendAdapterExpectedSchemaGraphqlApiManifest,
@@ -320,13 +322,101 @@ function schemaForType(type: BackendAdapterSchemaType): z.ZodTypeAny {
   }
 }
 
+function schemaForNode(node: BackendAdapterSchemaNode): z.ZodTypeAny {
+  let schema = schemaForDescriptor(node.schema);
+
+  if (node.nullable) {
+    schema = schema.nullable();
+  }
+
+  if (node.optional) {
+    schema = schema.optional();
+  }
+
+  return schema;
+}
+
+function schemaForDescriptor(descriptor: BackendAdapterSchemaDescriptor): z.ZodTypeAny {
+  switch (descriptor.type) {
+    case "array":
+      return z.array(schemaForNode(descriptor.items));
+    case "boolean":
+      return z.boolean();
+    case "discriminatedUnion": {
+      const options = descriptor.options.map((option) => schemaForNode(option));
+      const [firstOption, ...restOptions] = options;
+      if (!firstOption) {
+        throw new Error("Discriminated union schema must define at least one option.");
+      }
+
+      return z.discriminatedUnion(
+        descriptor.discriminator,
+        [firstOption, ...restOptions] as [z.ZodTypeAny, ...z.ZodTypeAny[]],
+      );
+    }
+    case "enum":
+      if (!descriptor.values.length) {
+        throw new Error("Enum schema must define at least one value.");
+      }
+
+      return z.enum(descriptor.values as [string, ...string[]]);
+    case "literal":
+      return z.literal(descriptor.value);
+    case "number": {
+      const schema = z.number();
+      return descriptor.integer ? schema.int() : schema;
+    }
+    case "object": {
+      const properties = Object.fromEntries(
+        Object.entries(descriptor.properties ?? {}).map(([key, value]) => [
+          key,
+          schemaForNode(value),
+        ]),
+      );
+      let schema = z.object(properties);
+
+      if (descriptor.additionalProperties === false) {
+        schema = schema.strict();
+      } else if (descriptor.additionalProperties && descriptor.additionalProperties !== true) {
+        schema = schema.catchall(schemaForNode(descriptor.additionalProperties));
+      }
+
+      return schema;
+    }
+    case "record":
+      return z.record(z.string(), schemaForNode(descriptor.values));
+    case "string":
+      return z.string();
+    case "union": {
+      const options = descriptor.options.map((option) => schemaForNode(option));
+      const [firstOption, secondOption, ...restOptions] = options;
+      if (!firstOption) {
+        throw new Error("Union schema must define at least one option.");
+      }
+      if (!secondOption) {
+        return firstOption;
+      }
+
+      return z.union(
+        [firstOption, secondOption, ...restOptions] as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]],
+      );
+    }
+    case "unknown":
+      return z.unknown();
+  }
+}
+
 export function createEntitySchemaFromExpectedSchemaEntity(
   entity: BackendAdapterExpectedSchemaEntityManifest,
   options: CreateGeneratedEntitySchemaOptions = {},
 ): EntitySchema<JsonObject, JsonObject, string | number> {
   const fields = Object.fromEntries(entity.fields.map((fieldManifest) => {
-    const entitySchema = schemaForType(fieldManifest.entityType);
-    const remoteSchema = schemaForType(fieldManifest.remoteType);
+    const entitySchema = fieldManifest.entitySchema
+      ? schemaForNode(fieldManifest.entitySchema)
+      : schemaForType(fieldManifest.entityType);
+    const remoteSchema = fieldManifest.remoteSchema
+      ? schemaForNode(fieldManifest.remoteSchema)
+      : schemaForType(fieldManifest.remoteType);
     let fieldBuilder: ModelFieldBuilder<
       unknown,
       unknown,

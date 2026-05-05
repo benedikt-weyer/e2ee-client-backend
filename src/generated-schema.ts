@@ -344,6 +344,10 @@ function schemaForDescriptor(descriptor: BackendAdapterSchemaDescriptor): z.ZodT
       return z.boolean();
     case "discriminatedUnion": {
       const options = descriptor.options.map((option) => schemaForNode(option));
+      if (!options.every((option): option is z.ZodObject<Record<string, z.ZodTypeAny>> => option instanceof z.ZodObject)) {
+        throw new Error("Discriminated union schema options must all be objects.");
+      }
+
       const [firstOption, ...restOptions] = options;
       if (!firstOption) {
         throw new Error("Discriminated union schema must define at least one option.");
@@ -351,7 +355,10 @@ function schemaForDescriptor(descriptor: BackendAdapterSchemaDescriptor): z.ZodT
 
       return z.discriminatedUnion(
         descriptor.discriminator,
-        [firstOption, ...restOptions] as [z.ZodTypeAny, ...z.ZodTypeAny[]],
+        [firstOption, ...restOptions] as [
+          z.ZodObject<Record<string, z.ZodTypeAny>>,
+          ...z.ZodObject<Record<string, z.ZodTypeAny>>[],
+        ],
       );
     }
     case "enum":

@@ -114,11 +114,13 @@ export interface BackendAdapterDatabaseManifest {
 }
 
 export interface BackendAdapterExpectedSchemaGraphqlApiManifest {
+  authenticated?: boolean;
   defaultHeaders?: Record<string, string>;
   endpointPath: string;
 }
 
 export interface BackendAdapterExpectedSchemaRestApiManifest {
+  authenticated?: boolean;
   baseUrl: string;
   defaultHeaders?: Record<string, string>;
 }
@@ -624,6 +626,7 @@ export function createBackendAdapterManifest(
 
   const expectedSchemaApi = options.database?.expectedSchema?.api ?? {
     rest: {
+      authenticated: false,
       baseUrl: "/api",
       defaultHeaders: {
         accept: "application/json",
@@ -645,6 +648,7 @@ export function createBackendAdapterManifest(
         api: expectedSchemaApi.type === "graphql"
           ? {
               graphql: {
+                authenticated: expectedSchemaApi.graphql.authenticated ?? false,
                 endpointPath: expectedSchemaApi.graphql.endpointPath,
                 ...(expectedSchemaApi.graphql.defaultHeaders
                   ? { defaultHeaders: expectedSchemaApi.graphql.defaultHeaders }
@@ -654,6 +658,7 @@ export function createBackendAdapterManifest(
             }
           : {
               rest: {
+                authenticated: expectedSchemaApi.rest.authenticated ?? false,
                 baseUrl: expectedSchemaApi.rest.baseUrl,
                 ...(expectedSchemaApi.rest.defaultHeaders
                   ? { defaultHeaders: expectedSchemaApi.rest.defaultHeaders }

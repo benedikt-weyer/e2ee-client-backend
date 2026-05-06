@@ -275,6 +275,7 @@ describe("backend adapter manifest", () => {
     ]);
     expect(manifest.database.expectedSchema.api).toEqual({
       rest: {
+        authenticated: false,
         baseUrl: "/api",
         defaultHeaders: {
           accept: "application/json",
@@ -529,6 +530,7 @@ describe("backend adapter manifest", () => {
 
     expect(manifest.database.expectedSchema.api).toEqual({
       graphql: {
+        authenticated: false,
         defaultHeaders: {
           accept: "application/json",
         },
@@ -761,6 +763,7 @@ describe("backend adapter manifest", () => {
         expectedSchema: {
           api: {
             rest: {
+              authenticated: true,
               baseUrl: "https://api.example.test/api",
               defaultHeaders: {
                 accept: "application/json",
@@ -821,6 +824,7 @@ describe("backend adapter manifest", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("notes", "https://api.example.test/api/"),
       {
+        credentials: "include",
         headers: new Headers({ accept: "application/json" }),
         method: "GET",
       },
@@ -922,6 +926,7 @@ describe("backend adapter manifest", () => {
       expectedSchema: {
         api: {
           graphql: {
+            authenticated: true,
             defaultHeaders: {
               accept: "application/json",
             },
@@ -1021,6 +1026,7 @@ describe("backend adapter manifest", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.test/graphql",
       expect.objectContaining({
+        credentials: "include",
         headers: expect.any(Headers),
         method: "POST",
       }),

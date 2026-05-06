@@ -33,6 +33,7 @@ function withBody<TBody>(
 
 export interface FetchRestTransportOptions {
   baseUrl: string;
+  credentials?: RequestCredentials;
   defaultHeaders?: Record<string, string>;
   fetch?: typeof fetch;
 }
@@ -69,6 +70,7 @@ export class FetchRestTransport implements RestTransport {
     const init: RequestInit = {
       method: request.method,
       headers,
+      ...(this.options.credentials ? { credentials: this.options.credentials } : {}),
     };
 
     if (request.body !== undefined) {

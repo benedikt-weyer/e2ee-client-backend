@@ -107,12 +107,14 @@ export interface BackendAdapterGeneratedSchemaFile {
 
 export interface CreateGeneratedRestTransportOptions {
   baseUrl?: string;
+  credentials?: RequestCredentials;
   defaultHeaders?: Record<string, string>;
   fetch?: FetchRestTransportOptions["fetch"];
 }
 
 export interface CreateGeneratedGraphqlTransportOptions {
   baseUrl?: string;
+  credentials?: RequestCredentials;
   defaultHeaders?: Record<string, string>;
   endpointPath?: string;
   fetch?: typeof fetch;
@@ -202,6 +204,17 @@ function resolveGraphqlEndpoint(
   }
 
   return endpointPath;
+}
+
+function resolveFetchCredentials(
+  authenticated: boolean | undefined,
+  credentials: RequestCredentials | undefined,
+): RequestCredentials | undefined {
+  if (credentials !== undefined) {
+    return credentials;
+  }
+
+  return authenticated ? "include" : undefined;
 }
 
 function createSelectionNode(): SelectionNode {
@@ -609,6 +622,7 @@ export function createGraphqlTransportFromExpectedSchema(
   const graphql = getSchemaGraphqlApi(schema);
   const endpoint = resolveGraphqlEndpoint(schema, options);
   const fetchImpl = options.fetch ?? fetch;
+  const credentials = resolveFetchCredentials(graphql.authenticated, options.credentials);
   const defaultHeaders = {
     ...(graphql.defaultHeaders ?? {}),
     ...(options.defaultHeaders ?? {}),
@@ -635,6 +649,7 @@ export function createGraphqlTransportFromExpectedSchema(
           ? { query: String(document) }
           : { query: String(document), variables },
       ),
+      ...(credentials ? { credentials } : {}),
       headers,
       method: "POST",
     });
@@ -719,9 +734,11 @@ export function createRestTransportFromExpectedSchema(
   options: CreateGeneratedRestTransportOptions = {},
 ): FetchRestTransport {
   const rest = getSchemaRestApi(schema);
+  const credentials = resolveFetchCredentials(rest.authenticated, options.credentials);
 
   return createFetchRestTransport({
     baseUrl: options.baseUrl ?? rest.baseUrl,
+    ...(credentials ? { credentials } : {}),
     defaultHeaders: {
       ...(rest.defaultHeaders ?? {}),
       ...(options.defaultHeaders ?? {}),

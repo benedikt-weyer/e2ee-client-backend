@@ -1,8 +1,12 @@
 import { z } from "zod";
 import type { EncryptionAlgorithmId } from "./crypto/types";
 import type {
+  BackendAdapterCustomOperationGraphqlManifest,
+  BackendAdapterCustomOperationRestManifest,
   BackendAdapterEntityGraphqlManifest,
   BackendAdapterEntityRestManifest,
+  BackendAdapterExpectedSchemaCustomOperationApiManifest,
+  BackendAdapterExpectedSchemaCustomOperationManifest,
   BackendAdapterSchemaDescriptor,
   BackendAdapterSchemaNode,
   BackendAdapterExpectedSchemaEntityApiManifest,
@@ -91,6 +95,28 @@ function getSchemaGraphqlApi(
   const api = schema.api;
   if (!api || api.type !== "graphql") {
     throw new Error("Generated schema file does not define GraphQL transport metadata.");
+  }
+
+  return api.graphql;
+}
+
+function getCustomOperationRestApi(
+  operation: BackendAdapterExpectedSchemaCustomOperationManifest,
+): BackendAdapterCustomOperationRestManifest {
+  const api = operation.api;
+  if (!api || api.type !== "rest") {
+    throw new Error(`Generated schema custom operation "${operation.name}" does not define REST API metadata.`);
+  }
+
+  return api.rest;
+}
+
+function getCustomOperationGraphqlApi(
+  operation: BackendAdapterExpectedSchemaCustomOperationManifest,
+): BackendAdapterCustomOperationGraphqlManifest {
+  const api = operation.api;
+  if (!api || api.type !== "graphql") {
+    throw new Error(`Generated schema custom operation "${operation.name}" does not define GraphQL API metadata.`);
   }
 
   return api.graphql;
@@ -272,6 +298,80 @@ function buildGraphqlSelectionSet(
   }
 
   return renderSelectionNode(root);
+}
+
+function buildGraphqlSelectionSetFromNode(
+  node: BackendAdapterSchemaNode,
+): string | undefined {
+  switch (node.schema.type) {
+    case "array":
+      return buildGraphqlSelectionSetFromNode(node.schema.items);
+    case "boolean":
+    case "enum":
+    case "literal":
+    case "number":
+    case "string":
+    case "unknown":
+      return undefined;
+    case "discriminatedUnion":
+    case "record":
+    case "union":
+      throw new Error(
+        "GraphQL custom operation response schemas with unions or records require an explicit selectionSet.",
+      );
+    case "object": {
+      const properties = Object.entries(node.schema.properties ?? {});
+      if (!properties.length) {
+        return undefined;
+      }
+
+      return properties.map(([key, value]) => {
+        const nested = buildGraphqlSelectionSetFromNode(value);
+        if (!nested) {
+          return `  ${key}`;
+        }
+
+        return `  ${key} {\n${nested.split("\n").map((line) => `  ${line}`).join("\n")}\n  }`;
+      }).join("\n");
+    }
+  }
+}
+
+function resolveCustomOperationSelectionSet(
+  operation: BackendAdapterExpectedSchemaCustomOperationManifest,
+  graphql: BackendAdapterCustomOperationGraphqlManifest,
+): string | undefined {
+  const configured = graphql.selectionSet?.trim();
+  if (configured) {
+    return configured;
+  }
+  if (!operation.responseSchema) {
+    return undefined;
+  }
+
+  return buildGraphqlSelectionSetFromNode(operation.responseSchema);
+}
+
+function buildGraphqlCustomOperationDocument(
+  operation: BackendAdapterExpectedSchemaCustomOperationManifest,
+  graphql: BackendAdapterCustomOperationGraphqlManifest,
+): string {
+  const selectionSet = resolveCustomOperationSelectionSet(operation, graphql);
+  const variableDefinitions = operation.requestSchema
+    ? `$input: ${graphql.inputTypeName ?? "JSON!"}`
+    : "";
+  const fieldArgs = operation.requestSchema ? "input: $input" : "";
+
+  return buildGraphqlDocument(
+    graphql.operationType,
+    normalizeGraphqlOperationName(operation.name),
+    graphql.fieldName,
+    variableDefinitions,
+    selectionSet,
+  ).replace(
+    graphql.fieldName + (variableDefinitions ? `(input: $input)` : ""),
+    `${graphql.fieldName}${fieldArgs ? `(${fieldArgs})` : ""}`,
+  );
 }
 
 function buildGraphqlCreateInputTypeName(
@@ -687,6 +787,82 @@ export function createGraphqlPasswordAuthConfigFromExpectedSchema<
   });
 }
 
+export function createRestCustomOperationFromExpectedSchemaOperation<
+  TRequest = unknown,
+  TResponse = unknown,
+>(
+  operation: BackendAdapterExpectedSchemaCustomOperationManifest,
+  transport: RestTransport,
+): (input?: TRequest) => Promise<TResponse> {
+  const rest = getCustomOperationRestApi(operation);
+
+  return async (input?: TRequest): Promise<TResponse> => transport.request<TResponse, TRequest>({
+    ...(input === undefined ? {} : { body: input }),
+    method: rest.method,
+    path: rest.path,
+  });
+}
+
+export function createRestCustomOperationsFromExpectedSchema<
+  TRequest = unknown,
+  TResponse = unknown,
+>(
+  schema: BackendAdapterExpectedSchemaManifest,
+  transport: RestTransport,
+): Record<string, (input?: TRequest) => Promise<TResponse>> {
+  if (schema.api?.type !== "rest") {
+    throw new Error("Generated schema file does not declare REST API support.");
+  }
+
+  return Object.fromEntries((schema.customOperations ?? []).map((operation) => [
+    operation.name,
+    createRestCustomOperationFromExpectedSchemaOperation<TRequest, TResponse>(operation, transport),
+  ]));
+}
+
+export function createGraphqlCustomOperationFromExpectedSchemaOperation<
+  TRequest = unknown,
+  TResponse = unknown,
+>(
+  operation: BackendAdapterExpectedSchemaCustomOperationManifest,
+  transport: GraphqlTransport,
+): (input?: TRequest) => Promise<TResponse> {
+  const graphql = getCustomOperationGraphqlApi(operation);
+  const document = buildGraphqlCustomOperationDocument(operation, graphql);
+
+  return async (input?: TRequest): Promise<TResponse> => {
+    const variables = operation.requestSchema
+      ? (input === undefined ? {} : { input }) as { input?: TRequest }
+      : undefined;
+    const result = graphql.operationType === "query"
+      ? await transport.query<Record<string, unknown>, { input?: TRequest }>(document, variables)
+      : await transport.mutate<Record<string, unknown>, { input?: TRequest }>(document, variables);
+
+    return extractGraphqlRootField(
+      result,
+      graphql.fieldName,
+      graphql.fieldName,
+    ) as TResponse;
+  };
+}
+
+export function createGraphqlCustomOperationsFromExpectedSchema<
+  TRequest = unknown,
+  TResponse = unknown,
+>(
+  schema: BackendAdapterExpectedSchemaManifest,
+  transport: GraphqlTransport,
+): Record<string, (input?: TRequest) => Promise<TResponse>> {
+  if (schema.api?.type !== "graphql") {
+    throw new Error("Generated schema file does not declare GraphQL API support.");
+  }
+
+  return Object.fromEntries((schema.customOperations ?? []).map((operation) => [
+    operation.name,
+    createGraphqlCustomOperationFromExpectedSchemaOperation<TRequest, TResponse>(operation, transport),
+  ]));
+}
+
 export function createRestCrudAdapterFromExpectedSchemaEntity<
   TRemote = JsonObject,
   TId extends string | number = string | number,
@@ -770,6 +946,19 @@ export function createRestTransportFromGeneratedSchemaFile(
   );
 }
 
+export function createRestCustomOperationsFromGeneratedSchemaFile<
+  TRequest = unknown,
+  TResponse = unknown,
+>(
+  json: string,
+  transport: RestTransport,
+): Record<string, (input?: TRequest) => Promise<TResponse>> {
+  return createRestCustomOperationsFromExpectedSchema<TRequest, TResponse>(
+    parseGeneratedSchemaFile(json).expectedSchema,
+    transport,
+  );
+}
+
 export function createGraphqlCrudAdaptersFromGeneratedSchemaFile<
   TRemote = JsonObject,
   TId extends string | number = string | number,
@@ -790,5 +979,18 @@ export function createGraphqlTransportFromGeneratedSchemaFile(
   return createGraphqlTransportFromExpectedSchema(
     parseGeneratedSchemaFile(json).expectedSchema,
     options,
+  );
+}
+
+export function createGraphqlCustomOperationsFromGeneratedSchemaFile<
+  TRequest = unknown,
+  TResponse = unknown,
+>(
+  json: string,
+  transport: GraphqlTransport,
+): Record<string, (input?: TRequest) => Promise<TResponse>> {
+  return createGraphqlCustomOperationsFromExpectedSchema<TRequest, TResponse>(
+    parseGeneratedSchemaFile(json).expectedSchema,
+    transport,
   );
 }

@@ -4,16 +4,20 @@ import {
   createBackendAdapterManifest,
   createEntitySchemaFromExpectedSchemaEntity,
   createEntitySchemasFromGeneratedSchemaFile,
+  createGraphqlCustomOperationsFromGeneratedSchemaFile,
   createGraphqlCrudAdaptersFromGeneratedSchemaFile,
   createGraphqlPasswordAuthConfigFromExpectedSchema,
   createGraphqlTransportFromGeneratedSchemaFile,
   createFetchRestTransport,
   createPasswordAuthAdapterFromConfig,
   createPasswordSessionAuthManifest,
+  createRestCustomOperationsFromGeneratedSchemaFile,
   createRestCrudAdaptersFromGeneratedSchemaFile,
   createRestTransportFromGeneratedSchemaFile,
+  defineBackendAdapterCustomOperation,
   defineBackendAdapterEntity,
   resolveBackendAdapterAuthUrls,
+  resolveBackendAdapterCustomOperationUrl,
   resolveBackendAdapterEntityUrl,
   resolveBackendAdapterRealtimeUrl,
   serializeBackendAdapterManifest,
@@ -207,6 +211,30 @@ describe("backend adapter manifest", () => {
         refreshDurationSeconds: 60 * 60 * 24 * 30,
         sessionDurationSeconds: 60 * 60,
       }),
+      customOperations: [defineBackendAdapterCustomOperation({
+        graphql: {
+          operationType: "query",
+        },
+        name: "gatewayStatus",
+        requestSchema: {
+          schema: {
+            additionalProperties: false,
+            properties: {
+              gatewayId: { schema: { type: "string" } },
+            },
+            type: "object",
+          },
+        },
+        responseSchema: {
+          schema: {
+            additionalProperties: false,
+            properties: {
+              ok: { schema: { type: "boolean" } },
+            },
+            type: "object",
+          },
+        },
+      })],
       entities: [defineBackendAdapterEntity({ model: noteModel })],
       name: "notes-service",
       realtime: {
@@ -273,6 +301,68 @@ describe("backend adapter manifest", () => {
         tableName: "notes",
       },
     ]);
+    expect(manifest.customOperations).toEqual([
+      {
+        graphql: {
+          fieldName: "gatewayStatus",
+          inputTypeName: "GatewayStatusInput!",
+          operationType: "query",
+        },
+        name: "gatewayStatus",
+        requestSchema: {
+          schema: {
+            additionalProperties: false,
+            properties: {
+              gatewayId: { schema: { type: "string" } },
+            },
+            type: "object",
+          },
+        },
+        responseSchema: {
+          schema: {
+            additionalProperties: false,
+            properties: {
+              ok: { schema: { type: "boolean" } },
+            },
+            type: "object",
+          },
+        },
+        rest: {
+          method: "POST",
+          path: "/operations/gateway-status",
+        },
+      },
+    ]);
+    expect(manifest.database.expectedSchema.customOperations).toEqual([
+      {
+        api: {
+          rest: {
+            method: "POST",
+            path: "/operations/gateway-status",
+          },
+          type: "rest",
+        },
+        name: "gatewayStatus",
+        requestSchema: {
+          schema: {
+            additionalProperties: false,
+            properties: {
+              gatewayId: { schema: { type: "string" } },
+            },
+            type: "object",
+          },
+        },
+        responseSchema: {
+          schema: {
+            additionalProperties: false,
+            properties: {
+              ok: { schema: { type: "boolean" } },
+            },
+            type: "object",
+          },
+        },
+      },
+    ]);
     expect(manifest.database.expectedSchema.api).toEqual({
       rest: {
         authenticated: false,
@@ -310,6 +400,15 @@ describe("backend adapter manifest", () => {
         "note",
       ),
     ).toBe("https://api.example.test/entities/note");
+    expect(
+      resolveBackendAdapterCustomOperationUrl(
+        {
+          manifest,
+          serverUrl: "https://api.example.test/",
+        },
+        "gatewayStatus",
+      ),
+    ).toBe("https://api.example.test/operations/gateway-status");
     expect(
       resolveBackendAdapterRealtimeUrl({
         manifest,
@@ -750,6 +849,78 @@ describe("backend adapter manifest", () => {
     await expect(notes.delete("note-1")).resolves.toBeUndefined();
   });
 
+  it("builds REST custom operations from the generated schema file format", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: URL, init?: RequestInit) => {
+      if (init?.method === "POST" && url.pathname === "/api/operations/gateway-status") {
+        return new Response(JSON.stringify({ ok: true, status: "online" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    const operations = createRestCustomOperationsFromGeneratedSchemaFile(
+      JSON.stringify({
+        expectedSchema: {
+          api: {
+            rest: {
+              baseUrl: "/api",
+              defaultHeaders: {
+                accept: "application/json",
+              },
+            },
+            type: "rest",
+          },
+          authTables: ["users", "sessions"],
+          customOperations: [
+            {
+              api: {
+                rest: {
+                  method: "POST",
+                  path: "/operations/gateway-status",
+                },
+                type: "rest",
+              },
+              name: "gatewayStatus",
+              requestSchema: {
+                schema: {
+                  additionalProperties: false,
+                  properties: {
+                    gatewayId: { schema: { type: "string" } },
+                  },
+                  type: "object",
+                },
+              },
+              responseSchema: {
+                schema: {
+                  additionalProperties: false,
+                  properties: {
+                    ok: { schema: { type: "boolean" } },
+                    status: { schema: { type: "string" } },
+                  },
+                  type: "object",
+                },
+              },
+            },
+          ],
+          entities: [],
+          entityTables: [],
+        },
+      }),
+      createFetchRestTransport({
+        baseUrl: "https://api.example.test/api",
+        fetch: fetchMock,
+      }),
+    );
+
+    await expect(operations.gatewayStatus?.({ gatewayId: "gw-1" })).resolves.toEqual({
+      ok: true,
+      status: "online",
+    });
+  });
+
   it("builds REST transport defaults from the generated schema file format", async () => {
     const fetchMock = vi.fn().mockImplementation(async () =>
       new Response(JSON.stringify({ ok: true }), {
@@ -1031,5 +1202,221 @@ describe("backend adapter manifest", () => {
         method: "POST",
       }),
     );
+  });
+
+  it("builds GraphQL custom operations from the generated schema file format", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as {
+        query: string;
+        variables?: Record<string, unknown>;
+      };
+
+      if (payload.query.includes("query GatewayStatus")) {
+        expect(payload.variables).toEqual({ input: { gatewayId: "gw-1" } });
+        return new Response(JSON.stringify({
+          data: {
+            gatewayStatus: {
+              ok: true,
+              status: "online",
+            },
+          },
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      throw new Error(`Unexpected GraphQL request: ${payload.query}`);
+    });
+
+    const operations = createGraphqlCustomOperationsFromGeneratedSchemaFile(
+      JSON.stringify({
+        expectedSchema: {
+          api: {
+            graphql: {
+              authenticated: true,
+              defaultHeaders: {
+                accept: "application/json",
+              },
+              endpointPath: "/graphql",
+            },
+            type: "graphql",
+          },
+          authTables: ["users", "sessions"],
+          customOperations: [
+            {
+              api: {
+                graphql: {
+                  fieldName: "gatewayStatus",
+                  inputTypeName: "GatewayStatusInput!",
+                  operationType: "query",
+                },
+                type: "graphql",
+              },
+              name: "gatewayStatus",
+              requestSchema: {
+                schema: {
+                  additionalProperties: false,
+                  properties: {
+                    gatewayId: { schema: { type: "string" } },
+                  },
+                  type: "object",
+                },
+              },
+              responseSchema: {
+                schema: {
+                  additionalProperties: false,
+                  properties: {
+                    ok: { schema: { type: "boolean" } },
+                    status: { schema: { type: "string" } },
+                  },
+                  type: "object",
+                },
+              },
+            },
+          ],
+          entities: [
+            {
+              api: {
+                graphql: {
+                  allowCreate: true,
+                  allowDelete: true,
+                  allowGetById: true,
+                  allowList: true,
+                  allowUpdate: true,
+                  createMutation: "createNote",
+                  deleteMutation: "deleteNote",
+                  getByIdQuery: "note",
+                  listQuery: "notes",
+                  updateMutation: "updateNote",
+                },
+                type: "graphql",
+              },
+              fields: [
+                {
+                  encrypted: false,
+                  entityPath: "id",
+                  entityType: "string",
+                  nullable: false,
+                  optional: false,
+                  remotePath: "id",
+                  remoteType: "string",
+                },
+              ],
+              idPath: "id",
+              name: "note",
+              primaryKey: "id",
+              tableName: "notes",
+            },
+          ],
+          entityTables: [{
+            columns: [
+              { columnName: "id", nullable: false, sqlType: "TEXT" },
+            ],
+            primaryKey: "id",
+            tableName: "notes",
+          }],
+        },
+      }),
+      createGraphqlTransportFromGeneratedSchemaFile(
+        JSON.stringify({
+          expectedSchema: {
+            api: {
+              graphql: {
+                authenticated: true,
+                defaultHeaders: {
+                  accept: "application/json",
+                },
+                endpointPath: "/graphql",
+              },
+              type: "graphql",
+            },
+            authTables: ["users", "sessions"],
+            customOperations: [
+              {
+                api: {
+                  graphql: {
+                    fieldName: "gatewayStatus",
+                    inputTypeName: "GatewayStatusInput!",
+                    operationType: "query",
+                  },
+                  type: "graphql",
+                },
+                name: "gatewayStatus",
+                requestSchema: {
+                  schema: {
+                    additionalProperties: false,
+                    properties: {
+                      gatewayId: { schema: { type: "string" } },
+                    },
+                    type: "object",
+                  },
+                },
+                responseSchema: {
+                  schema: {
+                    additionalProperties: false,
+                    properties: {
+                      ok: { schema: { type: "boolean" } },
+                      status: { schema: { type: "string" } },
+                    },
+                    type: "object",
+                  },
+                },
+              },
+            ],
+            entities: [
+              {
+                api: {
+                  graphql: {
+                    allowCreate: true,
+                    allowDelete: true,
+                    allowGetById: true,
+                    allowList: true,
+                    allowUpdate: true,
+                    createMutation: "createNote",
+                    deleteMutation: "deleteNote",
+                    getByIdQuery: "note",
+                    listQuery: "notes",
+                    updateMutation: "updateNote",
+                  },
+                  type: "graphql",
+                },
+                fields: [
+                  {
+                    encrypted: false,
+                    entityPath: "id",
+                    entityType: "string",
+                    nullable: false,
+                    optional: false,
+                    remotePath: "id",
+                    remoteType: "string",
+                  },
+                ],
+                idPath: "id",
+                name: "note",
+                primaryKey: "id",
+                tableName: "notes",
+              },
+            ],
+            entityTables: [{
+              columns: [
+                { columnName: "id", nullable: false, sqlType: "TEXT" },
+              ],
+              primaryKey: "id",
+              tableName: "notes",
+            }],
+          },
+        }),
+        {
+          baseUrl: "https://api.example.test",
+          fetch: fetchMock,
+        },
+      ),
+    );
+
+    await expect(operations.gatewayStatus?.({ gatewayId: "gw-1" })).resolves.toEqual({
+      ok: true,
+      status: "online",
+    });
   });
 });

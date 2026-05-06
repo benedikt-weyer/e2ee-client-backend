@@ -73,6 +73,7 @@ export type BackendAdapterSchemaDescriptor =
 
 export interface BackendAdapterManifest {
   auth: BackendAdapterAuthManifest;
+  customOperations?: BackendAdapterCustomOperationManifest[];
   database: BackendAdapterDatabaseManifest;
   entities: BackendAdapterEntityManifest[];
   name: string;
@@ -138,8 +139,46 @@ export type BackendAdapterExpectedSchemaApiManifest =
 export interface BackendAdapterExpectedSchemaManifest {
   api: BackendAdapterExpectedSchemaApiManifest;
   authTables: string[];
+  customOperations?: BackendAdapterExpectedSchemaCustomOperationManifest[];
   entities: BackendAdapterExpectedSchemaEntityManifest[];
   entityTables: BackendAdapterExpectedEntityTableManifest[];
+}
+
+export interface BackendAdapterCustomOperationGraphqlManifest {
+  fieldName: string;
+  inputTypeName?: string;
+  operationType: "mutation" | "query";
+  selectionSet?: string;
+}
+
+export interface BackendAdapterCustomOperationRestManifest {
+  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
+  path: string;
+}
+
+export interface BackendAdapterCustomOperationManifest {
+  graphql: BackendAdapterCustomOperationGraphqlManifest;
+  name: string;
+  requestSchema?: BackendAdapterSchemaNode;
+  responseSchema?: BackendAdapterSchemaNode;
+  rest: BackendAdapterCustomOperationRestManifest;
+}
+
+export type BackendAdapterExpectedSchemaCustomOperationApiManifest =
+  | {
+      graphql: BackendAdapterCustomOperationGraphqlManifest;
+      type: "graphql";
+    }
+  | {
+      rest: BackendAdapterCustomOperationRestManifest;
+      type: "rest";
+    };
+
+export interface BackendAdapterExpectedSchemaCustomOperationManifest {
+  api: BackendAdapterExpectedSchemaCustomOperationApiManifest;
+  name: string;
+  requestSchema?: BackendAdapterSchemaNode;
+  responseSchema?: BackendAdapterSchemaNode;
 }
 
 export interface BackendAdapterExpectedEntityColumnManifest {
@@ -246,8 +285,17 @@ export interface DefineBackendAdapterEntityOptions<
   tableName?: string;
 }
 
+export interface DefineBackendAdapterCustomOperationOptions {
+  graphql?: Partial<BackendAdapterCustomOperationGraphqlManifest>;
+  name: string;
+  requestSchema?: BackendAdapterSchemaNode;
+  responseSchema?: BackendAdapterSchemaNode;
+  rest?: Partial<BackendAdapterCustomOperationRestManifest>;
+}
+
 export interface CreateBackendAdapterManifestOptions {
   auth: BackendAdapterAuthManifest;
+  customOperations?: BackendAdapterCustomOperationManifest[];
   database?: Omit<Partial<BackendAdapterDatabaseManifest>, "expectedSchema"> & {
     expectedSchema?: Partial<BackendAdapterExpectedSchemaManifest>;
   };
@@ -417,6 +465,48 @@ function createExpectedSchemaEntityManifest(
     name: entity.name,
     primaryKey: entity.database.primaryKey,
     tableName: entity.tableName,
+  };
+}
+
+function createDefaultCustomOperationRestManifest(
+  name: string,
+): BackendAdapterCustomOperationRestManifest {
+  return {
+    method: "POST",
+    path: `/operations/${normalizePathSegment(name) || "operation"}`,
+  };
+}
+
+function createDefaultCustomOperationGraphqlManifest(
+  name: string,
+  requestSchema: BackendAdapterSchemaNode | undefined,
+): BackendAdapterCustomOperationGraphqlManifest {
+  return {
+    fieldName: normalizeGraphqlIdentifier(name),
+    ...(requestSchema
+      ? { inputTypeName: `${normalizeGraphqlIdentifier(name, true)}Input!` }
+      : {}),
+    operationType: "mutation",
+  };
+}
+
+function createExpectedSchemaCustomOperationManifest(
+  operation: BackendAdapterCustomOperationManifest,
+  apiType: BackendAdapterExpectedSchemaApiManifest["type"],
+): BackendAdapterExpectedSchemaCustomOperationManifest {
+  return {
+    api: apiType === "graphql"
+      ? {
+          graphql: { ...operation.graphql },
+          type: "graphql",
+        }
+      : {
+          rest: { ...operation.rest },
+          type: "rest",
+        },
+    name: operation.name,
+    ...(operation.requestSchema ? { requestSchema: operation.requestSchema } : {}),
+    ...(operation.responseSchema ? { responseSchema: operation.responseSchema } : {}),
   };
 }
 
@@ -593,6 +683,36 @@ export function defineBackendAdapterEntity<
   };
 }
 
+export function defineBackendAdapterCustomOperation(
+  options: DefineBackendAdapterCustomOperationOptions,
+): BackendAdapterCustomOperationManifest {
+  const graphqlDefaults = createDefaultCustomOperationGraphqlManifest(
+    options.name,
+    options.requestSchema,
+  );
+  const restDefaults = createDefaultCustomOperationRestManifest(options.name);
+
+  return {
+    graphql: {
+      fieldName: options.graphql?.fieldName ?? graphqlDefaults.fieldName,
+      ...(options.graphql?.inputTypeName ?? graphqlDefaults.inputTypeName
+        ? { inputTypeName: options.graphql?.inputTypeName ?? graphqlDefaults.inputTypeName }
+        : {}),
+      operationType: options.graphql?.operationType ?? graphqlDefaults.operationType,
+      ...(options.graphql?.selectionSet
+        ? { selectionSet: options.graphql.selectionSet }
+        : {}),
+    },
+    name: options.name,
+    ...(options.requestSchema ? { requestSchema: options.requestSchema } : {}),
+    ...(options.responseSchema ? { responseSchema: options.responseSchema } : {}),
+    rest: {
+      method: options.rest?.method ?? restDefaults.method,
+      path: options.rest?.path ?? restDefaults.path,
+    },
+  };
+}
+
 export function createPasswordSessionAuthManifest(
   input: BackendAdapterAuthManifest["rest"] & {
     refreshDurationSeconds: number;
@@ -639,9 +759,16 @@ export function createBackendAdapterManifest(
     options.entities.map((entity) =>
       createExpectedSchemaEntityManifest(entity, expectedSchemaApi.type)
     );
+  const customOperations = options.customOperations ?? [];
+  const expectedSchemaCustomOperations =
+    options.database?.expectedSchema?.customOperations ??
+    customOperations.map((operation) =>
+      createExpectedSchemaCustomOperationManifest(operation, expectedSchemaApi.type)
+    );
 
   const manifest: BackendAdapterManifest = {
     auth: options.auth,
+    ...(customOperations.length ? { customOperations } : {}),
     database: {
       engine: options.database?.engine ?? "postgres",
       expectedSchema: {
@@ -670,6 +797,9 @@ export function createBackendAdapterManifest(
           "users",
           "sessions",
         ],
+        ...(expectedSchemaCustomOperations.length
+          ? { customOperations: expectedSchemaCustomOperations }
+          : {}),
         entities: expectedSchemaEntities,
         entityTables: options.database?.expectedSchema?.entityTables ??
           expectedSchemaEntities.map((entity) => ({

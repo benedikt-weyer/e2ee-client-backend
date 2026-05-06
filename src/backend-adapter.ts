@@ -1,4 +1,5 @@
 import type {
+  BackendAdapterCustomOperationManifest,
   BackendAdapterEntityManifest,
   BackendAdapterManifest,
   BackendAdapterRealtimeManifest,
@@ -32,6 +33,19 @@ function getEntityManifest(
   return entity;
 }
 
+function getCustomOperationManifest(
+  manifest: BackendAdapterManifest,
+  operationName: string,
+): BackendAdapterCustomOperationManifest {
+  const operation = manifest.customOperations?.find((value) => value.name === operationName);
+
+  if (!operation) {
+    throw new Error(`Unknown backend adapter custom operation "${operationName}".`);
+  }
+
+  return operation;
+}
+
 export function resolveBackendAdapterAuthUrls(
   target: BackendAdapterClientTarget,
 ): Record<keyof BackendAdapterRestAuthPaths, string> {
@@ -52,6 +66,16 @@ export function resolveBackendAdapterEntityUrl(
   entityName: string,
 ): string {
   return joinUrl(target.serverUrl, getEntityManifest(target.manifest, entityName).rest.basePath);
+}
+
+export function resolveBackendAdapterCustomOperationUrl(
+  target: BackendAdapterClientTarget,
+  operationName: string,
+): string {
+  return joinUrl(
+    target.serverUrl,
+    getCustomOperationManifest(target.manifest, operationName).rest.path,
+  );
 }
 
 export function resolveBackendAdapterRealtimeUrl(
